@@ -1,0 +1,303 @@
+{
+  "info": {
+    "name": "Domain Management API",
+    "description": "Complete API collection for domain management, template switching, and blog operations",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000/api/v1/domain",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Domain CRUD Operations",
+      "item": [
+        {
+          "name": "Create Domain",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"My Website\",\n  \"slug\": \"my-website\",\n  \"url\": \"https://mywebsite.com\",\n  \"tags\": \"blog, tech, personal\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/createDomain",
+              "host": ["{{baseUrl}}"],
+              "path": ["createDomain"]
+            }
+          }
+        },
+        {
+          "name": "Create Domain (Bulk)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"domains\": [\n    {\n      \"name\": \"Tech Blog\",\n      \"slug\": \"tech-blog\",\n      \"url\": \"https://techblog.com\"\n    },\n    {\n      \"name\": \"Personal Blog\",\n      \"slug\": \"personal-blog\",\n      \"url\": \"https://personalblog.com\"\n    }\n  ],\n  \"tags\": \"blog, tech\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/createDomain",
+              "host": ["{{baseUrl}}"],
+              "path": ["createDomain"]
+            }
+          }
+        },
+        {
+          "name": "Get Domain by ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/getDomain/123e4567-e89b-12d3-a456-426614174000",
+              "host": ["{{baseUrl}}"],
+              "path": ["getDomain", "123e4567-e89b-12d3-a456-426614174000"]
+            }
+          }
+        },
+        {
+          "name": "Get All Domains",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/getAllDomains",
+              "host": ["{{baseUrl}}"],
+              "path": ["getAllDomains"]
+            }
+          }
+        },
+        {
+          "name": "Update Domain",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Website Name\",\n  \"url\": \"https://updatedwebsite.com\",\n  \"tags\": \"updated, blog, tech\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/updateDomain/123e4567-e89b-12d3-a456-426614174000",
+              "host": ["{{baseUrl}}"],
+              "path": ["updateDomain", "123e4567-e89b-12d3-a456-426614174000"]
+            }
+          }
+        },
+        {
+          "name": "Delete Domain",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/deleteDomain/123e4567-e89b-12d3-a456-426614174000",
+              "host": ["{{baseUrl}}"],
+              "path": ["deleteDomain", "123e4567-e89b-12d3-a456-426614174000"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Template/Layout Operations",
+      "item": [
+        {
+          "name": "Get Available Templates",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/getAvailableTemplates",
+              "host": ["{{baseUrl}}"],
+              "path": ["getAvailableTemplates"]
+            }
+          }
+        },
+        {
+          "name": "Create Domain Folder",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"domainName\": \"my-new-website\",\n  \"overwrite\": false\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/createDomainFolder",
+              "host": ["{{baseUrl}}"],
+              "path": ["createDomainFolder"]
+            }
+          }
+        },
+        {
+          "name": "Create Domain Folder (Overwrite)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"domainName\": \"my-new-website\",\n  \"overwrite\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/createDomainFolder",
+              "host": ["{{baseUrl}}"],
+              "path": ["createDomainFolder"]
+            }
+          }
+        },
+        {
+          "name": "Switch Domain Template",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"domainName\": \"my-website\",\n  \"newLayoutName\": \"MinimalLayout\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/switchDomainTemplate",
+              "host": ["{{baseUrl}}"],
+              "path": ["switchDomainTemplate"]
+            }
+          }
+        },
+        {
+          "name": "Get Domain Layout",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/getDomainLayout/my-website",
+              "host": ["{{baseUrl}}"],
+              "path": ["getDomainLayout", "my-website"]
+            }
+          }
+        },
+        {
+          "name": "List All Domains",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/listDomains",
+              "host": ["{{baseUrl}}"],
+              "path": ["listDomains"]
+            }
+          }
+        },
+        {
+          "name": "Get Domain Info",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/getDomainInfo/my-website",
+              "host": ["{{baseUrl}}"],
+              "path": ["getDomainInfo", "my-website"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Blog Operations",
+      "item": [
+        {
+          "name": "Add Blog Post to Domain (DEPRECATED)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"domainName\": \"my-website\",\n  \"fileName\": \"my-first-post.md\",\n  \"content\": \"---\\ntitle: \\\"My First Blog Post\\\"\\ndescription: \\\"This is my first blog post\\\"\\npubDate: 2024-01-01T00:00:00.000Z\\nauthor: \\\"John Doe\\\"\\nimage:\\n  url: \\\"/placeholder-image.jpg\\\"\\n  alt: \\\"Blog post image\\\"\\ntags: [\\\"blog\\\", \\\"first\\\"]\\n---\\n\\n# My First Blog Post\\n\\nThis is the content of my first blog post.\\n\\n## Introduction\\n\\nWelcome to my blog! This is where I'll be sharing my thoughts and experiences.\\n\\n## Conclusion\\n\\nThanks for reading!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/addBlogToDomain",
+              "host": ["{{baseUrl}}"],
+              "path": ["addBlogToDomain"]
+            }
+          }
+        },
+        {
+          "name": "Add Article to Domain",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"articleId\": \"123e4567-e89b-12d3-a456-426614174000\",\n  \"domainName\": \"my-website\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/addArticleToDomain",
+              "host": ["{{baseUrl}}"],
+              "path": ["addArticleToDomain"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Utility Operations",
+      "item": [
+        {
+          "name": "Build Domain",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/buildDomain/my-website",
+              "host": ["{{baseUrl}}"],
+              "path": ["buildDomain", "my-website"]
+            }
+          }
+        },
+        {
+          "name": "Get Domain Status",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/getDomainStatus/my-website",
+              "host": ["{{baseUrl}}"],
+              "path": ["getDomainStatus", "my-website"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+} 

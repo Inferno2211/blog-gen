@@ -1,0 +1,84 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ArticleStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+  PENDING
+  GENERATED
+  FLAGGED_BY_AI
+  APPROVED_BY_AI
+}
+
+model Domain {
+  id         String   @id @default(uuid()) @db.Uuid
+  slug       String   @unique
+  name       String
+  url        String?
+  tags       String?
+  created_at DateTime @default(now()) @db.Timestamptz
+
+  articles   Article[]
+}
+
+model Article {
+  id                   String         @id @default(uuid()) @db.Uuid
+  domain_id            String?         @db.Uuid
+  slug                 String         @unique
+  status               String
+  created_at           DateTime       @default(now()) @db.Timestamptz
+  updated_at           DateTime       @updatedAt @db.Timestamptz
+  baclink_expiry       DateTime?      @db.Timestamptz
+  user                 String?
+  topic                String?
+  niche                String?
+  keyword              String?
+  backlink_target      String?
+  anchor               String?
+
+  domain               Domain?         @relation(fields: [domain_id], references: [id], onDelete: Cascade)
+
+  // selected version (1:1)
+  selected_version_id String? @db.Uuid @unique
+  selected_version    ArticleVersion? @relation("SelectedVersion", fields: [selected_version_id], references: [id])
+
+  // all versions (1:many)
+  versions             ArticleVersion[] @relation("AllVersions")
+
+  @@map("articles")
+}
+
+model ArticleVersion {
+  id               String   @id @default(uuid()) @db.Uuid
+  article_id       String   @db.Uuid
+  version_num      Int
+  content_md       String   @db.Text
+  qc_attempts      Int      @default(0)
+  last_qc_status   String?
+  last_qc_notes    Json?
+  created_at       DateTime @default(now()) @db.Timestamptz
+  prompt           String?
+
+  // main article this version belongs to
+  article Article @relation("AllVersions", fields: [article_id], references: [id], onDelete: Cascade)
+
+  // optional back-reference for selected version (can be omitted if not needed)
+  selected_for Article? @relation("SelectedVersion")
+
+  @@unique([article_id, version_num])
+  @@map("article_versions")
+}

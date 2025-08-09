@@ -1,0 +1,619 @@
+{
+	"info": {
+		"_postman_id": "articles-api-collection",
+		"name": "Articles API Collection",
+		"description": "Complete API collection for Articles management including CRUD operations, version management, and publishing functionality.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "articles-api"
+	},
+	"item": [
+		{
+			"name": "CRUD Operations",
+			"item": [
+				{
+					"name": "Get All Articles",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/articles/getAllArticles",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"articles",
+								"getAllArticles"
+							]
+						},
+						"description": "Retrieves all articles with their versions and domain information."
+					},
+					"response": [
+						{
+							"name": "Success Response",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/articles/getAllArticles",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"articles",
+										"getAllArticles"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "[\n  {\n    \"id\": \"123e4567-e89b-12d3-a456-426614174000\",\n    \"domain_id\": \"123e4567-e89b-12d3-a456-426614174001\",\n    \"slug\": \"sample-article\",\n    \"status\": \"DRAFT\",\n    \"created_at\": \"2024-01-01T00:00:00.000Z\",\n    \"updated_at\": \"2024-01-01T00:00:00.000Z\",\n    \"user\": \"john.doe\",\n    \"topic\": \"Technology\",\n    \"niche\": \"Web Development\",\n    \"keyword\": \"React\",\n    \"backlink_target\": \"https://example.com\",\n    \"anchor\": \"Learn React\",\n    \"selected_version_id\": \"123e4567-e89b-12d3-a456-426614174002\",\n    \"domain\": {\n      \"id\": \"123e4567-e89b-12d3-a456-426614174001\",\n      \"slug\": \"my-website\",\n      \"name\": \"My Website\",\n      \"url\": \"https://mywebsite.com\",\n      \"tags\": \"blog, tech\",\n      \"created_at\": \"2024-01-01T00:00:00.000Z\"\n    },\n    \"versions\": [\n      {\n        \"id\": \"123e4567-e89b-12d3-a456-426614174002\",\n        \"article_id\": \"123e4567-e89b-12d3-a456-426614174000\",\n        \"version_num\": 1,\n        \"content_md\": \"# Sample Article\\n\\nThis is a sample article content.\",\n        \"qc_attempts\": 0,\n        \"last_qc_status\": null,\n        \"last_qc_notes\": null,\n        \"created_at\": \"2024-01-01T00:00:00.000Z\",\n        \"prompt\": \"Write about React development\"\n      }\n    ]\n  }\n]"
+						}
+					]
+				},
+				{
+					"name": "Get Article by ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/articles/getArticleById/{{articleId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"articles",
+								"getArticleById",
+								"{{articleId}}"
+							]
+						},
+						"description": "Retrieves a specific article by its ID with all versions and domain information."
+					},
+					"response": [
+						{
+							"name": "Success Response",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/articles/getArticleById/123e4567-e89b-12d3-a456-426614174000",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"articles",
+										"getArticleById",
+										"123e4567-e89b-12d3-a456-426614174000"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n  \"id\": \"123e4567-e89b-12d3-a456-426614174000\",\n  \"domain_id\": \"123e4567-e89b-12d3-a456-426614174001\",\n  \"slug\": \"sample-article\",\n  \"status\": \"DRAFT\",\n  \"created_at\": \"2024-01-01T00:00:00.000Z\",\n  \"updated_at\": \"2024-01-01T00:00:00.000Z\",\n  \"user\": \"john.doe\",\n  \"topic\": \"Technology\",\n  \"niche\": \"Web Development\",\n  \"keyword\": \"React\",\n  \"backlink_target\": \"https://example.com\",\n  \"anchor\": \"Learn React\",\n  \"selected_version_id\": \"123e4567-e89b-12d3-a456-426614174002\",\n  \"domain\": {\n    \"id\": \"123e4567-e89b-12d3-a456-426614174001\",\n    \"slug\": \"my-website\",\n    \"name\": \"My Website\",\n    \"url\": \"https://mywebsite.com\",\n    \"tags\": \"blog, tech\",\n    \"created_at\": \"2024-01-01T00:00:00.000Z\"\n  },\n  \"versions\": [\n    {\n      \"id\": \"123e4567-e89b-12d3-a456-426614174002\",\n      \"article_id\": \"123e4567-e89b-12d3-a456-426614174000\",\n      \"version_num\": 1,\n      \"content_md\": \"# Sample Article\\n\\nThis is a sample article content.\",\n      \"qc_attempts\": 0,\n      \"last_qc_status\": null,\n      \"last_qc_notes\": null,\n      \"created_at\": \"2024-01-01T00:00:00.000Z\",\n      \"prompt\": \"Write about React development\"\n    }\n  ]\n}"
+						},
+						{
+							"name": "Not Found Response",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/articles/getArticleById/invalid-id",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"articles",
+										"getArticleById",
+										"invalid-id"
+									]
+								}
+							},
+							"status": "Not Found",
+							"code": 404,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n  \"error\": \"Article not found\"\n}"
+						}
+					]
+				},
+				{
+					"name": "Update Article",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"status\": \"DRAFT\",\n  \"user\": \"john.doe\",\n  \"topic\": \"Updated Technology Topic\",\n  \"niche\": \"Updated Web Development\",\n  \"keyword\": \"Updated React\",\n  \"backlink_target\": \"https://updated-example.com\",\n  \"anchor\": \"Updated Learn React\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/articles/updateArticle/{{articleId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"articles",
+								"updateArticle",
+								"{{articleId}}"
+							]
+						},
+						"description": "Updates an existing article with new data. Only the fields provided will be updated."
+					},
+					"response": [
+						{
+							"name": "Success Response",
+							"originalRequest": {
+								"method": "PUT",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"status\": \"DRAFT\",\n  \"user\": \"john.doe\",\n  \"topic\": \"Updated Technology Topic\"\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/articles/updateArticle/123e4567-e89b-12d3-a456-426614174000",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"articles",
+										"updateArticle",
+										"123e4567-e89b-12d3-a456-426614174000"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n  \"id\": \"123e4567-e89b-12d3-a456-426614174000\",\n  \"domain_id\": \"123e4567-e89b-12d3-a456-426614174001\",\n  \"slug\": \"sample-article\",\n  \"status\": \"DRAFT\",\n  \"created_at\": \"2024-01-01T00:00:00.000Z\",\n  \"updated_at\": \"2024-01-02T00:00:00.000Z\",\n  \"user\": \"john.doe\",\n  \"topic\": \"Updated Technology Topic\",\n  \"niche\": \"Updated Web Development\",\n  \"keyword\": \"Updated React\",\n  \"backlink_target\": \"https://updated-example.com\",\n  \"anchor\": \"Updated Learn React\"\n}"
+						}
+					]
+				},
+				{
+					"name": "Delete Article",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/articles/deleteArticle/{{articleId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"articles",
+								"deleteArticle",
+								"{{articleId}}"
+							]
+						},
+						"description": "Deletes an article and all its associated versions from the database."
+					},
+					"response": [
+						{
+							"name": "Success Response",
+							"originalRequest": {
+								"method": "DELETE",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/articles/deleteArticle/123e4567-e89b-12d3-a456-426614174000",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"articles",
+										"deleteArticle",
+										"123e4567-e89b-12d3-a456-426614174000"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n  \"id\": \"123e4567-e89b-12d3-a456-426614174000\",\n  \"domain_id\": \"123e4567-e89b-12d3-a456-426614174001\",\n  \"slug\": \"sample-article\",\n  \"status\": \"DRAFT\",\n  \"created_at\": \"2024-01-01T00:00:00.000Z\",\n  \"updated_at\": \"2024-01-01T00:00:00.000Z\",\n  \"user\": \"john.doe\",\n  \"topic\": \"Technology\",\n  \"niche\": \"Web Development\",\n  \"keyword\": \"React\",\n  \"backlink_target\": \"https://example.com\",\n  \"anchor\": \"Learn React\"\n}"
+						}
+					]
+				}
+			],
+			"description": "Basic CRUD operations for articles"
+		},
+		{
+			"name": "Version Management",
+			"item": [
+				{
+					"name": "Set Selected Version",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"versionId\": \"123e4567-e89b-12d3-a456-426614174002\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/articles/setSelectedVersion/{{articleId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"articles",
+								"setSelectedVersion",
+								"{{articleId}}"
+							]
+						},
+						"description": "Sets the selected version for an article. This version will be used when publishing the article."
+					},
+					"response": [
+						{
+							"name": "Success Response",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"versionId\": \"123e4567-e89b-12d3-a456-426614174002\"\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/articles/setSelectedVersion/123e4567-e89b-12d3-a456-426614174000",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"articles",
+										"setSelectedVersion",
+										"123e4567-e89b-12d3-a456-426614174000"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n  \"id\": \"123e4567-e89b-12d3-a456-426614174000\",\n  \"domain_id\": \"123e4567-e89b-12d3-a456-426614174001\",\n  \"slug\": \"sample-article\",\n  \"status\": \"DRAFT\",\n  \"created_at\": \"2024-01-01T00:00:00.000Z\",\n  \"updated_at\": \"2024-01-01T00:00:00.000Z\",\n  \"selected_version_id\": \"123e4567-e89b-12d3-a456-426614174002\"\n}"
+						},
+						{
+							"name": "Bad Request Response",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/articles/setSelectedVersion/123e4567-e89b-12d3-a456-426614174000",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"articles",
+										"setSelectedVersion",
+										"123e4567-e89b-12d3-a456-426614174000"
+									]
+								}
+							},
+							"status": "Bad Request",
+							"code": 400,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n  \"error\": \"Missing versionId\"\n}"
+						}
+					]
+				}
+			],
+			"description": "Operations related to article version management"
+		},
+		{
+			"name": "Publishing",
+			"item": [
+				{
+					"name": "Publish Blog",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/articles/publishBlog/{{articleId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"articles",
+								"publishBlog",
+								"{{articleId}}"
+							]
+						},
+						"description": "Publishes an article to its associated domain. This will:\n1. Check if the article has a domain\n2. Verify the domain folder exists\n3. Get the selected version content\n4. Create a markdown file in the domain's content folder\n5. Update the article status to 'published'"
+					},
+					"response": [
+						{
+							"name": "Success Response",
+							"originalRequest": {
+								"method": "POST",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/articles/publishBlog/123e4567-e89b-12d3-a456-426614174000",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"articles",
+										"publishBlog",
+										"123e4567-e89b-12d3-a456-426614174000"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n  \"success\": true,\n  \"message\": \"Blog published\",\n  \"articleId\": \"123e4567-e89b-12d3-a456-426614174000\",\n  \"file\": \"sample-article.md\"\n}"
+						},
+						{
+							"name": "Article Not Found",
+							"originalRequest": {
+								"method": "POST",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/articles/publishBlog/invalid-id",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"articles",
+										"publishBlog",
+										"invalid-id"
+									]
+								}
+							},
+							"status": "Not Found",
+							"code": 404,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n  \"error\": \"Article not found\"\n}"
+						},
+						{
+							"name": "No Domain Error",
+							"originalRequest": {
+								"method": "POST",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/articles/publishBlog/123e4567-e89b-12d3-a456-426614174000",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"articles",
+										"publishBlog",
+										"123e4567-e89b-12d3-a456-426614174000"
+									]
+								}
+							},
+							"status": "Bad Request",
+							"code": 400,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n  \"error\": \"Article has no domain\"\n}"
+						},
+						{
+							"name": "Domain Folder Missing",
+							"originalRequest": {
+								"method": "POST",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/articles/publishBlog/123e4567-e89b-12d3-a456-426614174000",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"articles",
+										"publishBlog",
+										"123e4567-e89b-12d3-a456-426614174000"
+									]
+								}
+							},
+							"status": "Bad Request",
+							"code": 400,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n  \"error\": \"Domain folder does not exist\"\n}"
+						},
+						{
+							"name": "No Selected Version",
+							"originalRequest": {
+								"method": "POST",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/api/v1/articles/publishBlog/123e4567-e89b-12d3-a456-426614174000",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"v1",
+										"articles",
+										"publishBlog",
+										"123e4567-e89b-12d3-a456-426614174000"
+									]
+								}
+							},
+							"status": "Bad Request",
+							"code": 400,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n  \"error\": \"No selected version for this article\"\n}"
+						}
+					]
+				}
+			],
+			"description": "Operations related to publishing articles to domains"
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://localhost:5000",
+			"type": "string"
+		},
+		{
+			"key": "articleId",
+			"value": "123e4567-e89b-12d3-a456-426614174000",
+			"type": "string"
+		},
+		{
+			"key": "versionId",
+			"value": "123e4567-e89b-12d3-a456-426614174002",
+			"type": "string"
+		}
+	]
+} 
