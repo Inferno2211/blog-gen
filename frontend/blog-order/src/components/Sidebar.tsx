@@ -51,6 +51,7 @@ const Sidebar = ({ open, collapsed, onClose, onChevronClick }: SidebarProps) => 
                         <NavLink
                             key={item.to}
                             to={item.to}
+                            end={item.to === '/blogs' || item.to === '/domains'}
                             className={({ isActive }) =>
                                 `flex items-center px-4 py-2 rounded transition-colors ${isActive ? 'bg-blue-500 text-white' : 'text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700'} ${collapsed ? 'justify-center' : ''}`
                             }
