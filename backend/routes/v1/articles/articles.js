@@ -20,4 +20,10 @@ router.post('/createVersionFromEditor/:id', articlesController.createVersionFrom
 // Update already published file (Astro overwrite/rename)
 router.patch('/publishBlog/:id', articlesController.updatePublishedFile);
 
+// Edit article content - handles both published and unpublished articles
+router.put('/editArticleContent/:id', articlesController.editArticleContent);
+
+// Direct edit (no AI processing) - faster for simple edits
+router.put('/editArticleContentDirect/:id', articlesController.editArticleContentDirect);
+
 module.exports = router; 

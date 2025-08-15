@@ -1,4 +1,4 @@
-const { addBlogToDomain, updateBlogInDomain, createVersionFromEditor } = require('../../../services/articles/coreServices');
+const { addBlogToDomain, updateBlogInDomain, createVersionFromEditor, createVersionFromEditorDirect } = require('../../../services/articles/coreServices');
 const articleService = require('../../../services/articles/dbCrud');
 const staticGen = require('../../../services/domain/staticGen');
 
@@ -113,7 +113,7 @@ async function publishBlog(req, res) {
         }
         
         // 5. Set status to published
-        await articleService.updateArticle(id, { status: 'published' });
+        await articleService.updateArticle(id, { status: 'PUBLISHED' });
         
         res.json({ 
             success: true, 
@@ -194,6 +194,98 @@ async function updatePublishedFile(req, res) {
     }
 }
 
+// PUT /api/v1/articles/:id/edit-content
+async function editArticleContent(req, res) {
+    try {
+        const { id } = req.params;
+        const { 
+            content_md, 
+            model = 'gemini-2.5-flash', 
+            provider = 'gemini',
+            useAI = false  // Default to direct editing without AI
+        } = req.body;
+        
+        if (!content_md) {
+            return res.status(400).json({ error: 'Missing content_md' });
+        }
+
+        // Get the current article to check status
+        const article = await articleService.getArticle(id);
+        if (!article) {
+            return res.status(404).json({ error: 'Article not found' });
+        }
+
+        // Choose editing method based on useAI flag
+        const result = useAI 
+            ? await createVersionFromEditor(id, content_md, { model, provider })
+            : await createVersionFromEditorDirect(id, content_md);
+        
+        // If the article is published, also update the file
+        if (article.status === 'PUBLISHED' && article.domain && article.domain.slug) {
+            // Set this version as selected first
+            await articleService.setSelectedVersion(id, result.versionId);
+            
+            // Update the published file
+            const updateResult = await updateBlogInDomain(id, article.domain.slug);
+            
+            return res.json({
+                success: true,
+                message: `Article content updated ${useAI ? 'with AI processing' : 'directly'} and published file synchronized`,
+                articleId: id,
+                versionId: result.versionId,
+                versionNum: result.versionNum,
+                content: result.content,
+                qcResult: result.qcResult,
+                status: result.status,
+                fileUpdated: true,
+                filePath: updateResult.filePath,
+                fileName: updateResult.fileName,
+                editMethod: useAI ? 'AI_PROCESSED' : 'DIRECT_EDIT'
+            });
+        }
+
+        // For unpublished articles, just create the version
+        res.json({
+            success: true,
+            message: `Article content updated ${useAI ? 'with AI processing' : 'directly'} in database`,
+            articleId: id,
+            versionId: result.versionId,
+            versionNum: result.versionNum,
+            content: result.content,
+            qcResult: result.qcResult,
+            status: result.status,
+            fileUpdated: false,
+            editMethod: useAI ? 'AI_PROCESSED' : 'DIRECT_EDIT'
+        });
+        
+    } catch (err) {
+        let errorMessage = 'Failed to edit article content';
+        let statusCode = 500;
+        
+        if (err.message.includes('not found')) {
+            errorMessage = err.message;
+            statusCode = 404;
+        } else if (err.message.includes('Missing')) {
+            errorMessage = err.message;
+            statusCode = 400;
+        } else {
+            errorMessage = err.message;
+        }
+        
+        res.status(statusCode).json({
+            error: errorMessage,
+            timestamp: new Date().toISOString()
+        });
+    }
+}
+
+// PUT /api/v1/articles/:id/edit-content-direct
+async function editArticleContentDirect(req, res) {
+    // Force direct editing (no AI processing)
+    req.body.useAI = false;
+    return editArticleContent(req, res);
+}
+
 module.exports = {
     getAllArticles,
     getArticle,
@@ -202,5 +294,7 @@ module.exports = {
     setSelectedVersion,
     publishBlog,
     createVersionFromEditorHandler,
-    updatePublishedFile
+    updatePublishedFile,
+    editArticleContent,
+    editArticleContentDirect
 }; 

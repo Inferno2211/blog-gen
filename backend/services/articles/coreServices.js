@@ -588,6 +588,47 @@ async function updateBlogInDomain(articleId, domainName, options = {}) {
 }
 
 /**
+ * Create a new version from editor-provided markdown content - DIRECT EDIT VERSION
+ * - Simply saves the content as-is without AI processing
+ * - Minimal frontmatter processing
+ * - No QC, no content inference
+ * - Does NOT select the version automatically
+ * @param {string} articleId
+ * @param {string} contentMd
+ * @returns {Promise<{versionId: string, versionNum: number, content: string}>}
+ */
+async function createVersionFromEditorDirect(articleId, contentMd) {
+    const article = await getArticle(articleId);
+    if (!article) throw new Error('Article not found');
+
+    // Just fix basic frontmatter structure, no AI processing
+    const fixed = fixFrontmatterStructure(contentMd);
+
+    // Create the new version directly
+    const nextVersionNum = Math.max(...(article.versions?.map(v => v.version_num) || [0])) + 1;
+    
+    const newVersion = await prisma.articleVersion.create({
+        data: {
+            article_id: articleId,
+            version_num: nextVersionNum,
+            content_md: fixed,
+            qc_attempts: 0,
+            last_qc_status: 'DIRECT_EDIT',
+            last_qc_notes: { message: 'Direct edit - no QC performed' },
+            prompt: 'DIRECT_EDIT'
+        }
+    });
+
+    return {
+        versionId: newVersion.id,
+        versionNum: newVersion.version_num,
+        content: fixed,
+        qcResult: null,
+        status: 'DIRECT_EDIT'
+    };
+}
+
+/**
  * Create a new version from editor-provided markdown content.
  * - Fixes frontmatter, updates article fields from content
  * - QC run (single attempt) and pass-only version creation
@@ -642,5 +683,6 @@ module.exports = {
     createVersionForArticle,
     addBlogToDomain,
     updateBlogInDomain,
-    createVersionFromEditor
+    createVersionFromEditor,
+    createVersionFromEditorDirect
 };
