@@ -25,10 +25,17 @@ function sanitizeResponse(response) {
             cleaned = cleaned.substring(startIndex, endIndex);
         }
     } else {
-        // If markers are missing, try to start at YAML frontmatter
-        const yamlIndex = cleaned.indexOf('\n---\n');
-        if (yamlIndex !== -1) {
-            cleaned = cleaned.substring(yamlIndex + 1); // keep from first '---' line
+        // If markers are missing, check if content starts with YAML frontmatter
+        // Look for frontmatter at the beginning or after some whitespace/text
+        if (cleaned.startsWith('---')) {
+            // Content already starts with frontmatter, keep as is
+            // Do nothing - content is already properly formatted
+        } else {
+            // Try to find YAML frontmatter later in the content
+            const yamlIndex = cleaned.indexOf('\n---\n');
+            if (yamlIndex !== -1) {
+                cleaned = cleaned.substring(yamlIndex + 1); // keep from first '---' line
+            }
         }
     }
     
@@ -63,7 +70,9 @@ async function callAI(content, { provider = 'gemini', modelName } = {}) {
         default:
             throw new Error(`Unknown AI provider: ${provider}`);
     }
-    
+
+    console.log("aiCaller.js Response: ", response);
+    console.log("Sanitized Response: ", sanitizeResponse(response));
     return sanitizeResponse(response);
 }
 
