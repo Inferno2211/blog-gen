@@ -39,7 +39,9 @@ function parseYamlSection(yamlString) {
         const indent = line.length - line.trimStart().length;
         
         if (indent === 0 && trimmed.includes(':')) {
-            const [key, value] = trimmed.split(':').map(s => s.trim());
+            const colonIndex = trimmed.indexOf(':');
+            const key = trimmed.substring(0, colonIndex).trim();
+            const value = trimmed.substring(colonIndex + 1).trim();
             if (value && !value.startsWith('[')) {
                 // Simple key-value
                 result[key] = value.replace(/^["']|["']$/g, '');
@@ -53,7 +55,9 @@ function parseYamlSection(yamlString) {
                 currentObject = result[key];
             }
         } else if (currentObject && indent > 0 && trimmed.includes(':')) {
-            const [key, value] = trimmed.split(':').map(s => s.trim());
+            const colonIndex = trimmed.indexOf(':');
+            const key = trimmed.substring(0, colonIndex).trim();
+            const value = trimmed.substring(colonIndex + 1).trim();
             if (value) {
                 currentObject[key] = value.replace(/^["']|["']$/g, '');
             }
@@ -94,17 +98,47 @@ function serializeToYaml(obj, originalYaml = '') {
  * @returns {Array} - Array of image info objects
  */
 function findInlineImages(content) {
-    const regex = /!\[([^\]]*)\]\(<!--IMG_INLINE_DESC:\s*([^>]+)-->\)/g;
     const images = [];
-    let match;
     
-    while ((match = regex.exec(content)) !== null) {
+    // Pattern 1: Explicit description comments
+    const regex1 = /!\[([^\]]*)\]\(<!--IMG_INLINE_DESC:\s*([^>]+)-->\)/g;
+    let match;
+    while ((match = regex1.exec(content)) !== null) {
         images.push({
             fullMatch: match[0],
             altText: match[1].trim(),
             description: match[2].trim(),
             index: match.index
         });
+    }
+    
+    // Pattern 2: Placeholder URLs (picsum, placeholder services, etc.)
+    const regex2 = /!\[([^\]]*)\]\(([^)]*(?:picsum\.photos|placeholder|example\.com|IMAGE_PLACEHOLDER)[^)]*)\)/g;
+    while ((match = regex2.exec(content)) !== null) {
+        // Avoid duplicates from pattern 1
+        const alreadyFound = images.some(img => img.index === match.index);
+        if (!alreadyFound) {
+            images.push({
+                fullMatch: match[0],
+                altText: match[1].trim() || 'Image',
+                description: match[1].trim() || 'Blog post image',
+                index: match.index
+            });
+        }
+    }
+    
+    // Pattern 3: Images with generic/empty URLs
+    const regex3 = /!\[([^\]]+)\]\((?:|\s*|#)\)/g;
+    while ((match = regex3.exec(content)) !== null) {
+        const alreadyFound = images.some(img => img.index === match.index);
+        if (!alreadyFound) {
+            images.push({
+                fullMatch: match[0],
+                altText: match[1].trim(),
+                description: match[1].trim(),
+                index: match.index
+            });
+        }
     }
     
     return images;
@@ -180,13 +214,24 @@ async function insertImages(markdown) {
         // Collect all images to process
         const imagesToProcess = [];
         
-        // Add header image if it has description
-        if (frontmatter.image?.description) {
-            imagesToProcess.push({
-                type: 'header',
-                description: frontmatter.image.description,
-                altText: frontmatter.image.alt || 'Header image'
-            });
+        // Add header image if it exists and needs processing
+        if (frontmatter.image) {
+            const headerImage = frontmatter.image;
+            const shouldProcessHeader = 
+                headerImage.description || // Has explicit description
+                !headerImage.url || // No URL provided
+                headerImage.url.includes('picsum.photos') || // Placeholder service
+                headerImage.url.includes('placeholder') || // Generic placeholder
+                headerImage.url.includes('example.com') || // Example URL
+                headerImage.url === 'IMAGE_PLACEHOLDER'; // Explicit placeholder
+                
+            if (shouldProcessHeader) {
+                imagesToProcess.push({
+                    type: 'header',
+                    description: headerImage.description || headerImage.alt || 'Header image for blog post',
+                    altText: headerImage.alt || 'Header image'
+                });
+            }
         }
         
         // Find inline images

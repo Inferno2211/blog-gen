@@ -18,11 +18,41 @@ async function processImage(description, altText) {
   const safePrompt = encodeURIComponent(prompt);
   const pollinationsUrl = `https://image.pollinations.ai/prompt/${safePrompt}?width=${width}&height=${height}&nologo=true`;
 
-  // Optionally, you can warm up the URL to ensure it exists before Cloudinary fetch
-  try {
-    await axios.get(pollinationsUrl, { responseType: 'arraybuffer', timeout: 30000 });
-  } catch (_) {
-    // Ignore warm-up failures; Cloudinary fetch will attempt anyway
+  // Try to warm up the URL with retries
+  let retries = 3;
+  let lastError;
+  
+  for (let i = 0; i < retries; i++) {
+    try {
+      console.log(`Attempting to generate image (attempt ${i + 1}/${retries}): ${prompt.slice(0, 50)}...`);
+      const response = await axios.get(pollinationsUrl, { 
+        responseType: 'arraybuffer', 
+        timeout: 60000,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+      });
+      
+      if (response.status === 200 && response.data.length > 1000) {
+        console.log(`✅ Image generated successfully (${response.data.length} bytes)`);
+        break;
+      }
+    } catch (error) {
+      lastError = error;
+      console.log(`❌ Attempt ${i + 1} failed:`, error.message);
+      
+      // Wait before retrying (exponential backoff)
+      if (i < retries - 1) {
+        const delay = Math.pow(2, i) * 1000; // 1s, 2s, 4s
+        console.log(`Waiting ${delay}ms before retry...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+  }
+  
+  // If all retries failed, log but continue (Cloudinary might still be able to fetch it)
+  if (lastError) {
+    console.log(`⚠️  Image generation had issues, but continuing: ${lastError.message}`);
   }
 
   return {

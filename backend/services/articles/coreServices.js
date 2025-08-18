@@ -5,6 +5,7 @@ const { getUniqueArticleSlug, getUniqueArticleSlugExcludingId } = require('../..
 const fs = require('fs-extra');
 const path = require('path');
 const { extractFrontmatter, fixFrontmatterStructure, extractArticleDetails } = require('../../utils/markdownUtils');
+const { insertImages } = require('../../utils/insertImages');
 
 /**
  * Sanitize and slugify a string for use as a filename
@@ -184,10 +185,22 @@ async function performQC(articleId, content, maxRetries = 3, options = {}) {
         const qcPass = lastQCResult && (lastQCResult.status === 'pass');
         if (qcPass && hardChecksPass) {
             const fixedContent = fixFrontmatterStructure(lastContent);
+            
+            // Process images before saving to database
+            console.log('Processing images in article content...');
+            let contentWithImages;
+            try {
+                contentWithImages = await insertImages(fixedContent);
+                console.log('Images processed successfully');
+            } catch (imageError) {
+                console.warn('Image processing failed, using original content:', imageError.message);
+                contentWithImages = fixedContent;
+            }
+            
             const versionData = {
                 article_id: articleId,
                 version_num: versionNum,
-                content_md: fixedContent,
+                content_md: contentWithImages,
                 qc_attempts: attempt + 1,
                 last_qc_status: lastQCResult.status,
                 last_qc_notes: lastQCResult,
@@ -200,7 +213,7 @@ async function performQC(articleId, content, maxRetries = 3, options = {}) {
             finalVersionNum = versionNum;
             finalQCResult = lastQCResult;
             status = 'passed';
-            lastContent = fixedContent;
+            lastContent = contentWithImages;
             break;
         }
 
@@ -604,6 +617,17 @@ async function createVersionFromEditorDirect(articleId, contentMd) {
     // Just fix basic frontmatter structure, no AI processing
     const fixed = fixFrontmatterStructure(contentMd);
 
+    // Process images in the content
+    console.log('Processing images in edited content...');
+    let contentWithImages;
+    try {
+        contentWithImages = await insertImages(fixed);
+        console.log('Images processed successfully');
+    } catch (imageError) {
+        console.warn('Image processing failed, using original content:', imageError.message);
+        contentWithImages = fixed;
+    }
+
     // Create the new version directly
     const nextVersionNum = Math.max(...(article.versions?.map(v => v.version_num) || [0])) + 1;
     
@@ -611,7 +635,7 @@ async function createVersionFromEditorDirect(articleId, contentMd) {
         data: {
             article_id: articleId,
             version_num: nextVersionNum,
-            content_md: fixed,
+            content_md: contentWithImages,
             qc_attempts: 0,
             last_qc_status: 'DIRECT_EDIT',
             last_qc_notes: { message: 'Direct edit - no QC performed' },
@@ -622,7 +646,7 @@ async function createVersionFromEditorDirect(articleId, contentMd) {
     return {
         versionId: newVersion.id,
         versionNum: newVersion.version_num,
-        content: fixed,
+        content: contentWithImages,
         qcResult: null,
         status: 'DIRECT_EDIT'
     };
