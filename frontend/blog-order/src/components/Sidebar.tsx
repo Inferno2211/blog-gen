@@ -1,5 +1,6 @@
 import React from "react";
-import { NavLink } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
+import { logout, getAdminData } from "../services/authService";
 
 const navItems = [
   {
@@ -48,6 +49,21 @@ const navItems = [
         viewBox="0 0 24 24"
       >
         <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+      </svg>
+    ),
+  },
+  {
+    to: "/backlinks",
+    label: "Integrate Backlinks",
+    icon: (
+      <svg
+        className="w-5 h-5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        viewBox="0 0 24 24"
+      >
+        <path strokeLinecap="round" strokeLinejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
       </svg>
     ),
   },
@@ -102,6 +118,13 @@ const Sidebar = ({
   onClose,
   onChevronClick,
 }: SidebarProps) => {
+  const navigate = useNavigate();
+  const adminData = getAdminData();
+
+  const handleLogout = async () => {
+    await logout();
+    navigate('/login');
+  };
   return (
     <aside
       className={`transition-all duration-200 bg-white dark:bg-gray-800 shadow h-full ${
@@ -156,7 +179,28 @@ const Sidebar = ({
             </NavLink>
           ))}
         </nav>
-        <div className="p-4 border-t border-gray-700 flex justify-center">
+        
+        {/* User info and logout */}
+        <div className="px-2 py-4 border-t border-gray-200 dark:border-gray-700">
+          {!collapsed && adminData && (
+            <div className="px-4 py-2 text-sm text-gray-600 dark:text-gray-400">
+              <div className="font-medium text-gray-900 dark:text-white">{adminData.name}</div>
+              <div className="truncate">{adminData.email}</div>
+            </div>
+          )}
+          <button
+            onClick={handleLogout}
+            className={`flex items-center w-full px-4 py-2 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors ${
+              collapsed ? "justify-center" : ""
+            }`}
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
+            {!collapsed && <span className="ml-3">Logout</span>}
+          </button>
+        </div>
+        <div className="p-4 flex justify-center">
           <button
             onClick={onChevronClick}
             className="p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700"
@@ -166,7 +210,7 @@ const Sidebar = ({
               <svg
                 className="w-6 h-6"
                 fill="none"
-                stroke="white"
+                stroke="currentColor"
                 strokeWidth="2"
                 viewBox="0 0 24 24"
               >
@@ -180,7 +224,7 @@ const Sidebar = ({
               <svg
                 className="w-6 h-6"
                 fill="none"
-                stroke="white"
+                stroke="currentColor"
                 strokeWidth="2"
                 viewBox="0 0 24 24"
               >

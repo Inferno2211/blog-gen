@@ -1,17 +1,31 @@
 import type { Article } from "../types/article";
+import { getAuthToken } from "./authService";
 
 const API_BASE = `http://localhost:5000/api/v1/articles`;
 
+// Helper function to get headers with auth token
+const getHeaders = () => {
+  const token = getAuthToken();
+  return {
+    'Content-Type': 'application/json',
+    ...(token && { 'Authorization': `Bearer ${token}` })
+  };
+};
+
 // Get all articles with versions and domain information
 export async function getAllArticles(): Promise<Article[]> {
-  const res = await fetch(`${API_BASE}/getAllArticles`);
+  const res = await fetch(`${API_BASE}/getAllArticles`, {
+    headers: getHeaders()
+  });
   if (!res.ok) throw new Error("Failed to get articles");
   return res.json();
 }
 
 // Get article by ID
 export async function getArticle(id: string): Promise<Article> {
-  const res = await fetch(`${API_BASE}/getArticleById/${id}`);
+  const res = await fetch(`${API_BASE}/getArticleById/${id}`, {
+    headers: getHeaders()
+  });
   if (!res.ok) throw new Error("Failed to get article");
   return res.json();
 }
@@ -23,7 +37,7 @@ export async function updateArticle(
 ): Promise<Article> {
   const res = await fetch(`${API_BASE}/updateArticle/${id}`, {
     method: "PUT",
-    headers: { "Content-Type": "application/json" },
+    headers: getHeaders(),
     body: JSON.stringify(data),
   });
   if (!res.ok) throw new Error("Failed to update article");
@@ -34,6 +48,7 @@ export async function updateArticle(
 export async function deleteArticle(id: string): Promise<Article> {
   const res = await fetch(`${API_BASE}/deleteArticle/${id}`, {
     method: "DELETE",
+    headers: getHeaders(),
   });
   if (!res.ok) throw new Error("Failed to delete article");
   return res.json();
@@ -46,7 +61,7 @@ export async function setSelectedVersion(
 ): Promise<Article> {
   const res = await fetch(`${API_BASE}/setSelectedVersion/${articleId}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: getHeaders(),
     body: JSON.stringify({ versionId }),
   });
   if (!res.ok) throw new Error("Failed to set selected version");
@@ -64,6 +79,7 @@ export async function publishBlog(
 }> {
   const res = await fetch(`${API_BASE}/publishBlog/${articleId}`, {
     method: "POST",
+    headers: getHeaders(),
   });
   if (!res.ok) throw new Error("Failed to publish blog");
   return res.json();
@@ -76,7 +92,7 @@ export async function selectVersion(
 ): Promise<Article> {
   const res = await fetch(`${API_BASE}/setSelectedVersion/${articleId}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: getHeaders(),
     body: JSON.stringify({ versionId }),
   });
   if (!res.ok) throw new Error("Failed to select version");
@@ -106,7 +122,7 @@ export async function editArticleContent(
 }> {
   const res = await fetch(`${API_BASE}/editArticleContent/${articleId}`, {
     method: "PUT",
-    headers: { "Content-Type": "application/json" },
+    headers: getHeaders(),
     body: JSON.stringify({
       content_md,
       useAI,
@@ -138,7 +154,7 @@ export async function editArticleContentDirect(
 }> {
   const res = await fetch(`${API_BASE}/editArticleContentDirect/${articleId}`, {
     method: "PUT",
-    headers: { "Content-Type": "application/json" },
+    headers: getHeaders(),
     body: JSON.stringify({ content_md }),
   });
   if (!res.ok) throw new Error("Failed to edit article content");

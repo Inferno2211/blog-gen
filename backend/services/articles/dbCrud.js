@@ -12,8 +12,8 @@ async function getAllArticles() {
     return await prisma.article.findMany({ 
         include: { 
             versions: {
-                where: {
-                    last_qc_status: 'pass'
+                orderBy: {
+                    version_num: 'desc'
                 }
             }, 
             domain: true 
