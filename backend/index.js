@@ -31,13 +31,17 @@ async function startServer() {
         const startupService = new StartupService();
         await startupService.initialize();
         
-        app.listen(PORT, () => {
+        const server = app.listen(PORT, () => {
             console.log(`Server running on port ${PORT}`);
+            console.log(`Visit http://localhost:${PORT} to access the API`);
         });
+
     } catch (error) {
         console.error('Failed to start server:', error.message);
+        console.error('Stack trace:', error.stack);
         process.exit(1);
     }
 }
+
 
 startServer();

@@ -64,59 +64,59 @@ async function setSelectedVersion(req, res) {
 async function publishBlog(req, res) {
     try {
         const { id } = req.params;
-        
+
         // 1. Get article and domain
         const article = await articleService.getArticle(id);
         if (!article) {
-            return res.status(404).json({ 
+            return res.status(404).json({
                 error: 'Article not found',
                 details: `No article found with ID: ${id}`
             });
         }
-        
+
         if (!article.domain) {
-            return res.status(400).json({ 
+            return res.status(400).json({
                 error: 'Article has no domain',
                 details: 'Please assign a domain to this article before publishing'
             });
         }
-        
+
         // 2. Check if article has selected version
         if (!article.selected_version_id) {
-            return res.status(400).json({ 
+            return res.status(400).json({
                 error: 'No selected version for this article',
                 details: 'Please select a version before publishing'
             });
         }
-        
+
         // 3. Check domain folder exists
         const domainSlug = article.domain.slug;
         const domainFolder = staticGen.DOMAINS_BASE + '/' + domainSlug;
         const fs = require('fs-extra');
-        
+
         if (!await fs.pathExists(domainFolder)) {
-            return res.status(400).json({ 
+            return res.status(400).json({
                 error: 'Domain folder does not exist',
                 details: `Domain folder '${domainSlug}' not found`,
                 suggestion: 'Please create the domain folder first'
             });
         }
-        
+
         // 4. Use addArticleToDomain for proper formatting
         const result = await addBlogToDomain(id, domainSlug);
-        
+
         if (!result.success) {
             return res.status(400).json({
                 error: 'Failed to publish blog',
                 details: result.message || 'Unknown error occurred'
             });
         }
-        
+
         // 5. Set status to published
         await articleService.updateArticle(id, { status: 'PUBLISHED' });
-        
-        res.json({ 
-            success: true, 
+
+        res.json({
+            success: true,
             message: 'Blog published successfully!',
             articleId: id,
             file: result.fileName,
@@ -125,11 +125,11 @@ async function publishBlog(req, res) {
             originalSlug: result.originalSlug,
             article: result.article
         });
-        
+
     } catch (err) {
         let errorMessage = 'Failed to publish blog';
         let statusCode = 500;
-        
+
         if (err.message.includes('article not found')) {
             errorMessage = `Article with ID '${req.params.id}' not found`;
             statusCode = 404;
@@ -151,7 +151,7 @@ async function publishBlog(req, res) {
         } else {
             errorMessage = err.message;
         }
-        
+
         res.status(statusCode).json({
             error: errorMessage,
             timestamp: new Date().toISOString()
@@ -198,13 +198,13 @@ async function updatePublishedFile(req, res) {
 async function editArticleContent(req, res) {
     try {
         const { id } = req.params;
-        const { 
-            content_md, 
-            model = 'gemini-2.5-flash', 
+        const {
+            content_md,
+            model = 'gemini-2.5-flash',
             provider = 'gemini',
             useAI = false  // Default to direct editing without AI
         } = req.body;
-        
+
         if (!content_md) {
             return res.status(400).json({ error: 'Missing content_md' });
         }
@@ -216,18 +216,18 @@ async function editArticleContent(req, res) {
         }
 
         // Choose editing method based on useAI flag
-        const result = useAI 
+        const result = useAI
             ? await createVersionFromEditor(id, content_md, { model, provider })
             : await createVersionFromEditorDirect(id, content_md);
-        
+
         // If the article is published, also update the file
         if (article.status === 'PUBLISHED' && article.domain && article.domain.slug) {
             // Set this version as selected first
             await articleService.setSelectedVersion(id, result.versionId);
-            
+
             // Update the published file
             const updateResult = await updateBlogInDomain(id, article.domain.slug);
-            
+
             return res.json({
                 success: true,
                 message: `Article content updated ${useAI ? 'with AI processing' : 'directly'} and published file synchronized`,
@@ -257,11 +257,11 @@ async function editArticleContent(req, res) {
             fileUpdated: false,
             editMethod: useAI ? 'AI_PROCESSED' : 'DIRECT_EDIT'
         });
-        
+
     } catch (err) {
         let errorMessage = 'Failed to edit article content';
         let statusCode = 500;
-        
+
         if (err.message.includes('not found')) {
             errorMessage = err.message;
             statusCode = 404;
@@ -271,7 +271,7 @@ async function editArticleContent(req, res) {
         } else {
             errorMessage = err.message;
         }
-        
+
         res.status(statusCode).json({
             error: errorMessage,
             timestamp: new Date().toISOString()
@@ -286,6 +286,118 @@ async function editArticleContentDirect(req, res) {
     return editArticleContent(req, res);
 }
 
+// POST /api/v1/articles/integrateBacklink
+async function integrateBacklink(req, res) {
+    try {
+        const { articleId, backlinkUrl, anchorText, model, provider } = req.body;
+
+        // Input validation
+        if (!articleId) {
+            return res.status(400).json({
+                error: 'Missing required field: articleId',
+                code: 'MISSING_ARTICLE_ID'
+            });
+        }
+
+        if (!backlinkUrl) {
+            return res.status(400).json({
+                error: 'Missing required field: backlinkUrl',
+                code: 'MISSING_BACKLINK_URL'
+            });
+        }
+
+        if (!anchorText) {
+            return res.status(400).json({
+                error: 'Missing required field: anchorText',
+                code: 'MISSING_ANCHOR_TEXT'
+            });
+        }
+
+        // Validate URL format
+        try {
+            new URL(backlinkUrl);
+        } catch {
+            return res.status(400).json({
+                error: 'Invalid backlink URL format',
+                code: 'INVALID_URL_FORMAT'
+            });
+        }
+
+        // Validate anchor text length
+        if (anchorText.trim().length === 0) {
+            return res.status(400).json({
+                error: 'Anchor text cannot be empty',
+                code: 'EMPTY_ANCHOR_TEXT'
+            });
+        }
+
+        if (anchorText.length > 200) {
+            return res.status(400).json({
+                error: 'Anchor text too long (maximum 200 characters)',
+                code: 'ANCHOR_TEXT_TOO_LONG'
+            });
+        }
+
+        // Initialize BacklinkService
+        const BacklinkService = require('../../../services/BacklinkService');
+        const backlinkService = new BacklinkService();
+
+        // Integrate backlink
+        const result = await backlinkService.integrateBacklink(
+            articleId,
+            backlinkUrl,
+            anchorText.trim(),
+            { model, provider }
+        );
+
+        res.json({
+            success: true,
+            message: 'Backlink integrated successfully',
+            newVersionId: result.versionId,
+            versionNum: result.versionNum,
+            previewContent: result.previewContent,
+            backlinkUrl,
+            anchorText: anchorText.trim(),
+            timestamp: new Date().toISOString()
+        });
+
+    } catch (error) {
+        let errorMessage = 'Failed to integrate backlink';
+        let statusCode = 500;
+        let errorCode = 'INTEGRATION_FAILED';
+
+        if (error.message.includes('Article not found')) {
+            errorMessage = 'Article not found';
+            statusCode = 404;
+            errorCode = 'ARTICLE_NOT_FOUND';
+        } else if (error.message.includes('no content versions')) {
+            errorMessage = 'Article has no content to modify';
+            statusCode = 400;
+            errorCode = 'NO_CONTENT_VERSIONS';
+        } else if (error.message.includes('Selected version not found')) {
+            errorMessage = 'Selected article version not found';
+            statusCode = 404;
+            errorCode = 'VERSION_NOT_FOUND';
+        } else if (error.message.includes('Failed to generate content')) {
+            errorMessage = 'AI service failed to generate content with backlink';
+            statusCode = 500;
+            errorCode = 'AI_GENERATION_FAILED';
+        } else if (error.message.includes('Failed to create new article version')) {
+            errorMessage = 'Failed to save new article version';
+            statusCode = 500;
+            errorCode = 'VERSION_CREATION_FAILED';
+        } else {
+            errorMessage = error.message;
+        }
+
+        res.status(statusCode).json({
+            error: errorMessage,
+            code: errorCode,
+            timestamp: new Date().toISOString()
+        });
+    }
+}
+
 module.exports = {
     getAllArticles,
     getArticle,
@@ -296,5 +408,6 @@ module.exports = {
     createVersionFromEditorHandler,
     updatePublishedFile,
     editArticleContent,
-    editArticleContentDirect
+    editArticleContentDirect,
+    integrateBacklink
 }; 

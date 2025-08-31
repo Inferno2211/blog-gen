@@ -27,4 +27,7 @@ router.put('/editArticleContent/:id', authenticateAdmin, articlesController.edit
 // Direct edit (no AI processing) - faster for simple edits
 router.put('/editArticleContentDirect/:id', authenticateAdmin, articlesController.editArticleContentDirect);
 
+// Backlink integration - regenerate content with integrated backlinks
+router.post('/integrateBacklink', authenticateAdmin, articlesController.integrateBacklink);
+
 module.exports = router; 
