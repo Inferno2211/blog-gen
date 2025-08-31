@@ -3,6 +3,7 @@ const app = express();
 const cors = require('cors');
 const dotenv = require('dotenv');
 const { errorHandler } = require('./services/errors');
+const StartupService = require('./services/StartupService');
 
 app.use(express.json());
 dotenv.config({ silent: true });
@@ -23,6 +24,20 @@ app.get('/', (req, res) => {
 app.use(errorHandler);
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-});
+
+// Initialize startup service and start server
+async function startServer() {
+    try {
+        const startupService = new StartupService();
+        await startupService.initialize();
+        
+        app.listen(PORT, () => {
+            console.log(`Server running on port ${PORT}`);
+        });
+    } catch (error) {
+        console.error('Failed to start server:', error.message);
+        process.exit(1);
+    }
+}
+
+startServer();
