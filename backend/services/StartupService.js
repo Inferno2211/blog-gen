@@ -7,7 +7,7 @@ const authService = new AuthService();
 class StartupService {
   constructor() {
     this.defaultAdminEmail = process.env.ADMIN_EMAIL || 'admin@example.com';
-    this.defaultAdminPassword = process.env.ADMIN_PASSWORD || 'Admin123!@#';
+    this.defaultAdminPassword = process.env.ADMIN_PASSWORD || 'Admin123!@';
     this.defaultAdminName = process.env.ADMIN_NAME || 'System Administrator';
   }
 
@@ -67,7 +67,7 @@ class StartupService {
       const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
       if (!passwordRegex.test(adminData.password)) {
         console.warn('⚠️  Weak admin password in environment variables, using secure default');
-        adminData.password = 'SecureAdmin123!@#';
+        adminData.password = 'SecureAdmin123!@';
       }
 
       const admin = await authService.createAdmin(adminData);
@@ -75,7 +75,7 @@ class StartupService {
       console.log(`✅ Default admin created successfully with email: ${admin.email}`);
       
       // Log warning if using default credentials
-      if (adminData.email === 'admin@example.com' || adminData.password === 'SecureAdmin123!@#') {
+      if (adminData.email === 'admin@example.com' || adminData.password === 'SecureAdmin123!@') {
         console.warn('⚠️  WARNING: Using default admin credentials. Please change them immediately for security!');
       }
 

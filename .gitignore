@@ -1,3 +1,4 @@
 old
 .vscode
 **node_modules**
+.*
