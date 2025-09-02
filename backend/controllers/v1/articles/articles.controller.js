@@ -398,6 +398,60 @@ async function integrateBacklink(req, res) {
     }
 }
 
+// GET /api/v1/articles/backlinkReviewQueue
+async function getBacklinkReviewQueue(req, res) {
+    try {
+        const { status = 'PENDING_REVIEW', sortBy = 'created_at', sortOrder = 'desc' } = req.query;
+        
+        const articles = await articleService.getBacklinkReviewQueue(status, sortBy, sortOrder);
+        res.json(articles);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+}
+
+// POST /api/v1/articles/approveBacklink/:versionId
+async function approveBacklink(req, res) {
+    try {
+        const { versionId } = req.params;
+        const { reviewNotes } = req.body;
+        const adminId = req.admin.id;
+
+        const result = await articleService.approveBacklink(versionId, adminId, reviewNotes);
+        res.json(result);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+}
+
+// POST /api/v1/articles/rejectBacklink/:versionId
+async function rejectBacklink(req, res) {
+    try {
+        const { versionId } = req.params;
+        const { reviewNotes } = req.body;
+        const adminId = req.admin.id;
+
+        const result = await articleService.rejectBacklink(versionId, adminId, reviewNotes);
+        res.json(result);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+}
+
+// POST /api/v1/articles/approveAndPublish/:versionId
+async function approveAndPublish(req, res) {
+    try {
+        const { versionId } = req.params;
+        const { reviewNotes } = req.body;
+        const adminId = req.admin.id;
+
+        const result = await articleService.approveAndPublish(versionId, adminId, reviewNotes);
+        res.json(result);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+}
+
 module.exports = {
     getAllArticles,
     getArticle,
@@ -409,5 +463,9 @@ module.exports = {
     updatePublishedFile,
     editArticleContent,
     editArticleContentDirect,
-    integrateBacklink
+    integrateBacklink,
+    getBacklinkReviewQueue,
+    approveBacklink,
+    rejectBacklink,
+    approveAndPublish
 }; 

@@ -99,6 +99,64 @@ export async function selectVersion(
   return res.json();
 }
 
+// Backlink review workflow methods
+export async function getBacklinkReviewQueue(
+  status: string = 'PENDING_REVIEW',
+  sortBy: string = 'created_at',
+  sortOrder: string = 'desc'
+): Promise<any[]> {
+  const params = new URLSearchParams({
+    status,
+    sortBy,
+    sortOrder
+  });
+  
+  const res = await fetch(`${API_BASE}/backlinkReviewQueue?${params}`, {
+    headers: getHeaders()
+  });
+  if (!res.ok) throw new Error("Failed to get backlink review queue");
+  return res.json();
+}
+
+export async function approveBacklink(
+  versionId: string,
+  reviewNotes?: string
+): Promise<any> {
+  const res = await fetch(`${API_BASE}/approveBacklink/${versionId}`, {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify({ reviewNotes }),
+  });
+  if (!res.ok) throw new Error("Failed to approve backlink");
+  return res.json();
+}
+
+export async function rejectBacklink(
+  versionId: string,
+  reviewNotes?: string
+): Promise<any> {
+  const res = await fetch(`${API_BASE}/rejectBacklink/${versionId}`, {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify({ reviewNotes }),
+  });
+  if (!res.ok) throw new Error("Failed to reject backlink");
+  return res.json();
+}
+
+export async function approveAndPublish(
+  versionId: string,
+  reviewNotes?: string
+): Promise<any> {
+  const res = await fetch(`${API_BASE}/approveAndPublish/${versionId}`, {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify({ reviewNotes }),
+  });
+  if (!res.ok) throw new Error("Failed to approve and publish");
+  return res.json();
+}
+
 // Edit article content (handles both published and unpublished articles)
 export async function editArticleContent(
   articleId: string,

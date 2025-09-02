@@ -13,6 +13,7 @@ import ViewBlogs from "./pages/ViewBlogs";
 import CreateDomain from "./pages/CreateDomain";
 import ViewDomains from "./pages/ViewDomains";
 import ManageBacklinks from "./pages/ManageBacklinks";
+import BacklinkReview from "./pages/BacklinkReview";
 import { isAuthenticated } from "./services/authService";
 
 function App() {
@@ -31,6 +32,7 @@ function App() {
                   <Route path="/blogs/edit/:articleId" element={<EditBlogs />} />
                   <Route path="/blogs" element={<ViewBlogs />} />
                   <Route path="/backlinks" element={<ManageBacklinks />} />
+                  <Route path="/backlink-review" element={<BacklinkReview />} />
                   <Route path="/domains/create" element={<CreateDomain />} />
                   <Route path="/domains" element={<ViewDomains />} />
                   <Route 

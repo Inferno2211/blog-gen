@@ -67,7 +67,7 @@ class BacklinkService {
         );
 
         // Create new article version
-        const result = await this.createNewArticleVersion(articleId, newContent);
+        const result = await this.createNewArticleVersion(articleId, newContent, backlinkUrl, anchorText, originalContent);
 
         // Generate preview content (first 500 characters of body content)
         const previewContent = this._generatePreviewContent(newContent);
@@ -108,7 +108,7 @@ class BacklinkService {
      * @param {string} newContent - The new content with integrated backlink
      * @returns {Promise<{versionId: string, versionNum: number}>}
      */
-    async createNewArticleVersion(articleId, newContent) {
+    async createNewArticleVersion(articleId, newContent, backlinkUrl, anchorText, originalContent) {
         try {
             // Get current article to determine next version number
             const article = await getArticle(articleId);
@@ -130,7 +130,11 @@ class BacklinkService {
             // Calculate next version number
             const nextVersionNum = Math.max(...(article.versions?.map(v => v.version_num) || [0])) + 1;
 
-            // Create new version without changing article status
+            // Generate hash of original content for diff comparison
+            const crypto = require('crypto');
+            const originalContentHash = crypto.createHash('md5').update(originalContent).digest('hex');
+
+            // Create new version with backlink review flag
             const newVersion = await prisma.articleVersion.create({
                 data: {
                     article_id: articleId,
@@ -139,10 +143,17 @@ class BacklinkService {
                     qc_attempts: 0,
                     last_qc_status: 'BACKLINK_INTEGRATION',
                     last_qc_notes: { 
-                        message: 'Content regenerated with backlink integration',
+                        message: 'Content regenerated with backlink integration - pending admin review',
                         type: 'backlink_integration'
                     },
-                    prompt: 'BACKLINK_INTEGRATION'
+                    prompt: 'BACKLINK_INTEGRATION',
+                    backlink_review_status: 'PENDING_REVIEW',
+                    backlink_metadata: {
+                        backlink_url: backlinkUrl,
+                        anchor_text: anchorText,
+                        original_content_hash: originalContentHash,
+                        integration_date: new Date().toISOString()
+                    }
                 }
             });
 

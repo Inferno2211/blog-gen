@@ -30,4 +30,10 @@ router.put('/editArticleContentDirect/:id', authenticateAdmin, articlesControlle
 // Backlink integration - regenerate content with integrated backlinks
 router.post('/integrateBacklink', authenticateAdmin, articlesController.integrateBacklink);
 
+// Backlink review workflow
+router.get('/backlinkReviewQueue', authenticateAdmin, articlesController.getBacklinkReviewQueue);
+router.post('/approveBacklink/:versionId', authenticateAdmin, articlesController.approveBacklink);
+router.post('/rejectBacklink/:versionId', authenticateAdmin, articlesController.rejectBacklink);
+router.post('/approveAndPublish/:versionId', authenticateAdmin, articlesController.approveAndPublish);
+
 module.exports = router; 
