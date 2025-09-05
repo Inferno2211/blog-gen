@@ -1,89 +1,490 @@
-# Domain Management API Documentation
+# Complete Backend API Documentation
 
 ## Base URL
-```
-http://localhost:3000/api/v1/domain
+
+```bash
+http://localhost:5000/api/v1
 ```
 
 ## Overview
-This API provides comprehensive domain management capabilities including CRUD operations, template/layout management, blog operations, and utility functions.
+
+This is a comprehensive API documentation for the Blog Generation Platform backend. The API provides functionality for AI-powered article generation, domain management, article publishing, authentication, and static site generation.
+
+## Authentication
+
+All endpoints (except authentication endpoints) require admin authentication via JWT token in the Authorization header:
+
+```http
+Authorization: Bearer <jwt_token>
+```
 
 ---
 
-## 🔧 Domain CRUD Operations
+## 🔐 Authentication API
 
-### 1. Create Domain
-**POST** `/createDomain`
+### Base URL: `/auth`
 
-Creates a new domain in the database.
+#### Login
+
+**POST** `/auth/login`
+
+Authenticate admin user and receive JWT token.
 
 **Request Body:**
+
 ```json
 {
-  "name": "My Website",
-  "slug": "my-website",
-  "url": "https://mywebsite.com",
-  "tags": "blog, tech, personal"
+  "email": "admin@example.com",
+  "password": "password123"
 }
 ```
 
 **Response:**
+
 ```json
 {
   "success": true,
-  "id": "123e4567-e89b-12d3-a456-426614174000",
-  "slug": "my-website"
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "expiresIn": "24h",
+  "admin": {
+    "id": "123e4567-e89b-12d3-a456-426614174000",
+    "email": "admin@example.com",
+    "name": "Admin User"
+  }
 }
 ```
 
-### 2. Create Domain (Bulk)
-**POST** `/createDomain`
+#### Logout
 
-Creates multiple domains at once.
+**POST** `/auth/logout`
 
-**Request Body:**
+Logout admin user (requires authentication).
+
+**Response:**
+
 ```json
 {
-  "domains": [
-    {
-      "name": "Tech Blog",
-      "slug": "tech-blog",
-      "url": "https://techblog.com"
-    },
-    {
-      "name": "Personal Blog",
-      "slug": "personal-blog",
-      "url": "https://personalblog.com"
-    }
-  ],
-  "tags": "blog, tech"
+  "success": true,
+  "message": "Logged out successfully"
+}
+```
+
+#### Get All Admins
+
+**GET** `/auth/admins`
+
+Retrieve all admin users.
+
+**Response:**
+
+```json
+[
+  {
+    "id": "123e4567-e89b-12d3-a456-426614174000",
+    "email": "admin@example.com",
+    "name": "Admin User",
+    "created_at": "2024-01-01T00:00:00.000Z"
+  }
+]
+```
+
+#### Create Admin
+
+**POST** `/auth/admins`
+
+Create a new admin user.
+
+**Request Body:**
+
+```json
+{
+  "email": "newadmin@example.com",
+  "password": "securepassword123",
+  "name": "New Admin"
+}
+```
+
+#### Update Admin
+
+**PUT** `/auth/admins/:id`
+
+Update an existing admin user.
+
+**Request Body:**
+
+```json
+{
+  "email": "updatedadmin@example.com",
+  "password": "newpassword123",
+  "name": "Updated Admin"
+}
+```
+
+#### Delete Admin
+
+**DELETE** `/auth/admins/:id`
+
+Delete an admin user.
+
+---
+
+## 🤖 AI Generation API
+
+### Base URL: `/ai`
+
+#### Generate Article
+
+**POST** `/ai/generateArticle`
+
+Generate a new article with AI and create initial version.
+
+**Request Body:**
+
+```json
+{
+  "domain_id": "123e4567-e89b-12d3-a456-426614174000",
+  "status": "DRAFT",
+  "user": "john.doe",
+  "niche": "Web Development",
+  "keyword": "React",
+  "topic": "Getting Started with React",
+  "n": 3,
+  "targetURL": "https://example.com",
+  "anchorText": "Learn React",
+  "model": "gemini-2.5-flash",
+  "provider": "gemini",
+  "maxRetries": 3,
+  "userPrompt": "Write a comprehensive guide...",
+  "internalLinkEnabled": false,
+  "noExternalBacklinks": true
 }
 ```
 
 **Response:**
+
 ```json
 {
-  "results": [
+  "articleId": "123e4567-e89b-12d3-a456-426614174000",
+  "draft": {
+    "versionId": "123e4567-e89b-12d3-a456-426614174001",
+    "versionNum": 1,
+    "content": "# Getting Started with React\n\n...",
+    "qcResult": {
+      "passed": true,
+      "score": 85,
+      "issues": []
+    }
+  },
+  "status": "DRAFT"
+}
+```
+
+#### Generate Article Version
+
+**POST** `/ai/generateArticleVersion`
+
+Generate a new version for an existing article.
+
+**Request Body:**
+
+```json
+{
+  "articleId": "123e4567-e89b-12d3-a456-426614174000",
+  "provider": "gemini",
+  "maxRetries": 3,
+  "userPrompt": "Improve the introduction...",
+  "internalLinkEnabled": false,
+  "noExternalBacklinks": true
+}
+```
+
+---
+
+## 📝 Articles API
+
+### Base URL: `/articles`
+
+#### Article Data Structure
+
+**Article Model:**
+
+```json
+{
+  "id": "123e4567-e89b-12d3-a456-426614174000",
+  "domain_id": "123e4567-e89b-12d3-a456-426614174001",
+  "slug": "sample-article",
+  "status": "DRAFT",
+  "created_at": "2024-01-01T00:00:00.000Z",
+  "updated_at": "2024-01-01T00:00:00.000Z",
+  "backlink_expiry": "2024-12-31T23:59:59.000Z",
+  "user": "john.doe",
+  "topic": "Technology",
+  "niche": "Web Development",
+  "keyword": "React",
+  "backlink_target": "https://example.com",
+  "anchor": "Learn React",
+  "selected_version_id": "123e4567-e89b-12d3-a456-426614174002",
+  "domain": {
+    "id": "123e4567-e89b-12d3-a456-426614174001",
+    "slug": "my-website",
+    "name": "My Website",
+    "url": "https://mywebsite.com",
+    "tags": "blog, tech"
+  },
+  "versions": [
     {
-      "domain": "tech-blog",
-      "success": true,
-      "id": "123e4567-e89b-12d3-a456-426614174000"
-    },
-    {
-      "domain": "personal-blog",
-      "success": true,
-      "id": "123e4567-e89b-12d3-a456-426614174001"
+      "id": "123e4567-e89b-12d3-a456-426614174002",
+      "version_num": 1,
+      "content_md": "# Sample Article\n\nContent...",
+      "qc_attempts": 0,
+      "last_qc_status": null,
+      "created_at": "2024-01-01T00:00:00.000Z"
     }
   ]
 }
 ```
 
-### 3. Get Domain by ID
-**GET** `/getDomain/:id`
+**Article Status Values:**
 
-Retrieves a specific domain by its ID.
+- `DRAFT` - Article is in draft state
+- `PUBLISHED` - Article has been published to domain
+- `ARCHIVED` - Article has been archived
+- `PENDING` - Article is pending review
+- `GENERATED` - Article was generated by AI
+- `FLAGGED_BY_AI` - Article was flagged by AI quality check
+- `APPROVED_BY_AI` - Article was approved by AI quality check
+
+#### CRUD Operations
+
+##### Get All Articles
+
+**GET** `/articles/getAllArticles`
+
+Retrieve all articles with versions and domain information.
+
+##### Get Article by ID
+
+**GET** `/articles/getArticleById/:id`
+
+Retrieve a specific article by ID.
+
+##### Update Article
+
+**PUT** `/articles/updateArticle/:id`
+
+Update article metadata (not content).
+
+**Request Body:**
+
+```json
+{
+  "status": "PUBLISHED",
+  "topic": "Updated Topic",
+  "keyword": "Updated Keyword"
+}
+```
+
+##### Delete Article
+
+**DELETE** `/articles/deleteArticle/:id`
+
+Delete an article and all its versions.
+
+#### Version Management
+
+##### Set Selected Version
+
+**POST** `/articles/setSelectedVersion/:id`
+
+Set which version of the article is the selected/active version.
+
+**Request Body:**
+
+```json
+{
+  "versionId": "123e4567-e89b-12d3-a456-426614174002"
+}
+```
+
+##### Create Version from Editor
+
+**POST** `/articles/createVersionFromEditor/:id`
+
+Create a new version from editor content with optional AI processing.
+
+**Request Body:**
+
+```json
+{
+  "content_md": "# Updated Article\n\nNew content...",
+  "model": "gemini-2.5-flash",
+  "provider": "gemini"
+}
+```
+
+#### Publishing Operations
+
+##### Publish Article
+
+**POST** `/articles/publishBlog/:id`
+
+Publish an article to its associated domain. Creates/updates the static file.
 
 **Response:**
+
+```json
+{
+  "success": true,
+  "message": "Blog published successfully!",
+  "articleId": "123e4567-e89b-12d3-a456-426614174000",
+  "file": "sample-article.md",
+  "filePath": "/domains/my-website/src/content/blog/sample-article.md",
+  "sanitizedSlug": "sample-article",
+  "originalSlug": "sample-article",
+  "article": { ... }
+}
+```
+
+##### Update Published File
+
+**PATCH** `/articles/publishBlog/:id`
+
+Update an already published article's file (for republishing after edits).
+
+**Request Body:**
+
+```json
+{
+  "domainName": "my-website"
+}
+```
+
+#### Content Editing
+
+##### Edit Article Content
+
+**PUT** `/articles/editArticleContent/:id`
+
+Edit article content with optional AI processing. Handles both published and unpublished articles.
+
+**Request Body:**
+
+```json
+{
+  "content_md": "# Updated Content\n\nNew content here...",
+  "model": "gemini-2.5-flash",
+  "provider": "gemini",
+  "useAI": false
+}
+```
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "message": "Article content updated directly in database",
+  "articleId": "123e4567-e89b-12d3-a456-426614174000",
+  "versionId": "123e4567-e89b-12d3-a456-426614174002",
+  "versionNum": 2,
+  "content": "# Updated Content\n\nNew content here...",
+  "qcResult": { ... },
+  "status": "DRAFT",
+  "fileUpdated": false,
+  "editMethod": "DIRECT_EDIT"
+}
+```
+
+##### Direct Edit (No AI)
+
+**PUT** `/articles/editArticleContentDirect/:id`
+
+Direct edit without AI processing (faster for simple edits).
+
+#### Backlink Management
+
+##### Integrate Backlink
+
+**POST** `/articles/integrateBacklink`
+
+Regenerate article content with integrated backlinks.
+
+**Request Body:**
+
+```json
+{
+  "articleId": "123e4567-e89b-12d3-a456-426614174000",
+  "backlinkUrl": "https://example.com",
+  "anchorText": "Learn More",
+  "model": "gemini-2.5-flash",
+  "provider": "gemini"
+}
+```
+
+##### Get Backlink Review Queue
+
+**GET** `/articles/backlinkReviewQueue`
+
+Get articles pending backlink review.
+
+**Query Parameters:**
+
+- `status` (default: "PENDING_REVIEW")
+- `sortBy` (default: "created_at")
+- `sortOrder` (default: "desc")
+
+##### Approve Backlink
+
+**POST** `/articles/approveBacklink/:versionId`
+
+Approve a backlink integration.
+
+**Request Body:**
+
+```json
+{
+  "reviewNotes": "Backlink looks good"
+}
+```
+
+##### Reject Backlink
+
+**POST** `/articles/rejectBacklink/:versionId`
+
+Reject a backlink integration.
+
+**Request Body:**
+
+```json
+{
+  "reviewNotes": "Backlink not relevant"
+}
+```
+
+##### Approve and Publish
+
+**POST** `/articles/approveAndPublish/:versionId`
+
+Approve backlink and publish the article.
+
+**Request Body:**
+
+```json
+{
+  "reviewNotes": "Approved and published"
+}
+```
+
+---
+
+## 🌐 Domain Management API
+
+### Base URL: `/domain`
+
+#### Domain Data Structure
+
+**Domain Model:**
+
 ```json
 {
   "id": "123e4567-e89b-12d3-a456-426614174000",
@@ -91,370 +492,259 @@ Retrieves a specific domain by its ID.
   "slug": "my-website",
   "url": "https://mywebsite.com",
   "tags": "blog, tech, personal",
-  "created_at": "2024-01-01T00:00:00.000Z"
-}
-```
-
-### 4. Get All Domains
-**GET** `/getAllDomains`
-
-Retrieves all domains with their associated articles.
-
-**Response:**
-```json
-{
-  "total": 2,
-  "domains": [
+  "created_at": "2024-01-01T00:00:00.000Z",
+  "articleCount": 5,
+  "articles": [
     {
-      "id": "123e4567-e89b-12d3-a456-426614174000",
-      "name": "My Website",
-      "slug": "my-website",
-      "url": "https://mywebsite.com",
-      "tags": "blog, tech, personal",
-      "created_at": "2024-01-01T00:00:00.000Z",
-      "articles": [],
-      "articleCount": 0
+      "id": "123e4567-e89b-12d3-a456-426614174001",
+      "slug": "sample-article",
+      "topic": "Sample Topic",
+      "status": "PUBLISHED"
     }
   ]
 }
 ```
 
-### 5. Update Domain
-**PUT** `/updateDomain/:id`
+#### Domain CRUD Operations
 
-Updates an existing domain.
+##### Create Domain
+
+**POST** `/domain/createDomain`
+
+Create a new domain.
+
+**Request Body (Single):**
+
+```json
+{
+  "name": "My Website",
+  "slug": "my-website",
+  "url": "https://mywebsite.com",
+  "tags": "blog, tech"
+}
+```
+
+**Request Body (Bulk):**
+
+```json
+{
+  "domains": [
+    {
+      "name": "Tech Blog",
+      "slug": "tech-blog",
+      "url": "https://techblog.com"
+    }
+  ],
+  "tags": "blog, tech"
+}
+```
+
+##### Get Domain by ID
+
+**GET** `/domain/getDomain/:id`
+
+Retrieve a specific domain by ID.
+
+##### Get All Domains
+
+**GET** `/domain/getAllDomains`
+
+Retrieve all domains with article counts.
+
+##### Update Domain
+
+**PUT** `/domain/updateDomain/:id`
+
+Update domain information.
 
 **Request Body:**
+
 ```json
 {
   "name": "Updated Website Name",
   "url": "https://updatedwebsite.com",
-  "tags": "updated, blog, tech"
+  "tags": "blog, tech, updated"
 }
 ```
 
-### 6. Delete Domain
-**DELETE** `/deleteDomain/:id`
+##### Delete Domain
 
-Deletes a domain from the database.
+**DELETE** `/domain/deleteDomain/:id`
 
----
+Delete a domain (only if no associated articles).
 
-## 🎨 Template/Layout Operations
+#### Template/Layout Management
 
-### 7. Get Available Templates
-**GET** `/getAvailableTemplates`
+##### Get Available Templates
 
-Retrieves all available layout templates.
+**GET** `/domain/getAvailableTemplates`
+
+Get list of available Astro templates/layouts.
 
 **Response:**
+
 ```json
 {
   "success": true,
-  "templates": ["MicroblogLayout", "MinimalLayout", "ModernLayout"],
+  "templates": [
+    "ModernLayout.astro",
+    "MinimalLayout.astro",
+    "MicroblogLayout.astro"
+  ],
   "count": 3
 }
 ```
 
-### 8. Create Domain Folder
-**POST** `/createDomainFolder`
+##### Create Domain Folder
 
-Creates a new domain folder by copying the template.
+**POST** `/domain/createDomainFolder`
+
+Create a new domain folder by copying a template.
 
 **Request Body:**
+
 ```json
 {
-  "domainName": "my-new-website",
+  "domainName": "my-website",
   "overwrite": false
 }
 ```
 
-**Parameters:**
-- `domainName` (required): The name of the domain folder to create
-- `overwrite` (optional): If `true`, will overwrite existing domain folder. Default: `false`
+##### Switch Domain Template
 
-**Response:**
-```json
-{
-  "success": true,
-  "domainName": "my-new-website",
-  "domainPath": "/path/to/astro-builds/domains/my-new-website",
-  "overwrite": false,
-  "message": "Domain 'my-new-website' created successfully!"
-}
-```
+**PUT** `/domain/switchDomainTemplate`
 
-**Error Response (Domain Already Exists):**
-```json
-{
-  "error": "Domain folder 'my-new-website' already exists",
-  "timestamp": "2024-01-01T00:00:00.000Z"
-}
-```
-
-### 9. Switch Domain Template
-**PUT** `/switchDomainTemplate`
-
-Switches a domain to use a different layout template.
+Change the template/layout for an existing domain.
 
 **Request Body:**
+
 ```json
 {
   "domainName": "my-website",
-  "newLayoutName": "MinimalLayout"
+  "newLayoutName": "ModernLayout.astro"
 }
 ```
 
-**Response:**
-```json
-{
-  "success": true,
-  "domainName": "my-website",
-  "newLayoutName": "MinimalLayout",
-  "configPath": "/path/to/config.json",
-  "message": "Domain 'my-website' switched to 'MinimalLayout' layout!"
-}
-```
+##### Get Domain Layout
 
-### 10. Get Domain Layout
-**GET** `/getDomainLayout/:domainName`
+**GET** `/domain/getDomainLayout/:domainName`
 
-Gets the current layout for a domain.
+Get the current layout/template for a domain.
 
-**Response:**
-```json
-{
-  "success": true,
-  "domainName": "my-website",
-  "layout": "MinimalLayout"
-}
-```
+##### List Domains
 
-### 11. List All Domains
-**GET** `/listDomains`
+**GET** `/domain/listDomains`
 
-Lists all domain folders with their information.
+List all domain folders in the file system.
 
-**Response:**
-```json
-{
-  "success": true,
-  "domains": [
-    {
-      "domainName": "my-website",
-      "layout": "MinimalLayout",
-      "lastModified": "2024-01-01T00:00:00.000Z",
-      "configPath": "/path/to/config.json"
-    }
-  ],
-  "count": 1
-}
-```
+#### Blog Operations
 
-### 12. Get Domain Info
-**GET** `/getDomainInfo/:domainName`
+##### Add Article to Domain
 
-Gets detailed information about a domain.
+**POST** `/domain/addArticleToDomain`
 
-**Response:**
-```json
-{
-  "success": true,
-  "domainInfo": {
-    "domainName": "my-website",
-    "layout": "MinimalLayout",
-    "lastModified": "2024-01-01T00:00:00.000Z",
-    "configPath": "/path/to/config.json"
-  }
-}
-```
-
----
-
-## 📝 Blog Operations
-
-### 13. Add Blog Post to Domain (DEPRECATED)
-**POST** `/addBlogToDomain`
-
-⚠️ **DEPRECATED**: This endpoint is deprecated. Use `addArticleToDomain` instead for proper article formatting.
-
-**Response:**
-```json
-{
-  "error": "This endpoint is deprecated",
-  "details": "Please use addArticleToDomain instead for proper article formatting with frontmatter",
-  "suggestion": "Use POST /api/v1/domain/addArticleToDomain with articleId and domainName"
-}
-```
-
-### 14. Add Article to Domain
-**POST** `/addArticleToDomain`
-
-Adds an article from the database to a domain as a blog post.
+Add an article to a domain (create/update the static file).
 
 **Request Body:**
+
 ```json
 {
   "articleId": "123e4567-e89b-12d3-a456-426614174000",
-  "domainName": "my-website"
+  "domainSlug": "my-website"
 }
 ```
 
-**Response:**
-```json
-{
-  "success": true,
-  "filePath": "/path/to/article-slug.md",
-  "fileName": "article-slug.md",
-  "message": "Blog post \"Article Title\" successfully added to domain my-website",
-  "article": {
-    "id": "123e4567-e89b-12d3-a456-426614174000",
-    "slug": "article-slug",
-    "title": "Article Title",
-    "author": "Author Name",
-    "pubDate": "2024-01-01T00:00:00.000Z"
-  }
-}
-```
+#### Build Operations
+
+##### Build Domain
+
+**POST** `/domain/buildDomain/:domainName`
+
+Build the domain (npm install + npm run build).
+
+##### Download Domain
+
+**GET** `/domain/downloadDomain/:domainName`
+
+Download the built domain as a ZIP file.
+
+##### Get Domain Status
+
+**GET** `/domain/getDomainStatus/:domainName`
+
+Get the build status and information for a domain.
 
 ---
 
-## 🛠️ Utility Operations
+## 📊 Error Responses
 
-### 15. Build Domain
-**POST** `/buildDomain/:domainName`
-
-Builds the domain using npm run build (simplified approach).
-
-**Response:**
-```json
-{
-  "success": true,
-  "message": "Domain 'my-website' built successfully!",
-  "stdout": "npm run build output..."
-}
-```
-
-**Error Response:**
-```json
-{
-  "success": false,
-  "message": "Build failed",
-  "error": "Error details",
-  "stderr": "Error output"
-}
-```
-
-### 16. Download Domain
-**GET** `/downloadDomain/:domainName`
-
-Downloads the built domain as a zip file.
-
-**Response:** Binary zip file with filename like `domain-name-2024-01-01T00-00-00.zip`
-
-**Error Response:**
-```json
-{
-  "success": false,
-  "message": "No built site found. Please run build first."
-}
-```
-
-### 17. Get Build Instructions (DEPRECATED)
-**GET** `/getBuildInstructions/:domainName`
-
-⚠️ **DEPRECATED**: This endpoint is deprecated. Use the simplified build approach instead.
-
-### 18. Get Domain Status
-**GET** `/getDomainStatus/:domainName`
-
-Gets the current status of a domain including build status and post count.
-
-**Response:**
-```json
-{
-  "success": true,
-  "domainName": "my-website",
-  "status": {
-    "exists": true,
-    "hasNodeModules": true,
-    "hasDist": true,
-    "postCount": 5,
-    "layout": "MinimalLayout",
-    "lastModified": "2024-01-01T00:00:00.000Z"
-  }
-}
-```
-
----
-
-## 📋 Error Responses
-
-All endpoints return consistent error responses:
+### Standard Error Format
 
 ```json
 {
-  "error": "Error message description"
+  "error": "Error message",
+  "code": "ERROR_CODE",
+  "timestamp": "2024-01-01T00:00:00.000Z",
+  "details": "Additional error details"
 }
 ```
 
-Common HTTP status codes:
+### Common HTTP Status Codes
+
 - `200` - Success
-- `400` - Bad Request (missing required fields)
-- `404` - Not Found (domain/article not found)
+- `201` - Created
+- `400` - Bad Request
+- `401` - Unauthorized
+- `403` - Forbidden
+- `404` - Not Found
+- `409` - Conflict
 - `500` - Internal Server Error
+- `507` - Insufficient Storage
+
+### Common Error Codes
+
+- `MISSING_CREDENTIALS` - Email/password missing
+- `INVALID_CREDENTIALS` - Wrong email/password
+- `INVALID_EMAIL` - Email format invalid
+- `WEAK_PASSWORD` - Password doesn't meet requirements
+- `MISSING_REQUIRED_FIELDS` - Required fields missing
+- `ARTICLE_NOT_FOUND` - Article doesn't exist
+- `DOMAIN_NOT_FOUND` - Domain doesn't exist
+- `VERSION_NOT_FOUND` - Article version doesn't exist
 
 ---
 
-## 🚀 Usage Examples
+## 🔧 Development Notes
 
-### Complete Workflow Example
+### Environment Variables
 
-1. **Create Domain Folder:**
-   ```bash
-   POST /api/v1/domain/createDomainFolder
-   {
-     "domainName": "my-blog"
-   }
-   ```
+```env
+DATABASE_URL=postgresql://user:password@localhost:5432/blog_gen
+JWT_SECRET=your_jwt_secret_here
+JWT_EXPIRES_IN=24h
+GEMINI_API_KEY=your_gemini_api_key
+```
 
-2. **Switch Layout:**
-   ```bash
-   PUT /api/v1/domain/switchDomainTemplate
-   {
-     "domainName": "my-blog",
-     "newLayoutName": "ModernLayout"
-   }
-   ```
+### Database Schema
 
-3. **Add Blog Post:**
-   ```bash
-   POST /api/v1/domain/addBlogToDomain
-   {
-     "domainName": "my-blog",
-     "fileName": "welcome-post.md",
-     "content": "---\ntitle: \"Welcome\"\n---\n\nWelcome to my blog!"
-   }
-   ```
+The API uses Prisma ORM with PostgreSQL. Key tables:
 
-4. **Build Domain:**
-   ```bash
-   POST /api/v1/domain/buildDomain/my-blog
-   ```
+- `Admin` - Admin users
+- `Domain` - Website domains
+- `Article` - Articles with metadata
+- `ArticleVersion` - Article content versions
 
-5. **Check Status:**
-   ```bash
-   GET /api/v1/domain/getDomainStatus/my-blog
-   ```
+### File Structure
+
+- `astro-builds/domains/` - Generated domain websites
+- `astro-builds/templates/` - Astro templates
+- Static files are generated in domain folders
+
+### Rate Limiting
+
+Consider implementing rate limiting for AI generation endpoints to prevent abuse.
 
 ---
 
-## 📦 Postman Collection
-
-Import the provided Postman collection (`Domain_API_Collection.json`) to get all endpoints with sample data pre-configured.
-
-The collection includes:
-- All 16 API endpoints
-- Sample request bodies
-- Environment variables
-- Organized folders by operation type 
+*Last updated: September 5, 2025*
+*API Version: v1*

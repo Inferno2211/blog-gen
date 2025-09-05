@@ -1,10 +1,7 @@
 const domainService = require('../../../services/domain/domainCrud');
 const staticGen = require('../../../services/domain/staticGen');
-const { exec } = require('child_process');
 const path = require('path');
-const fs = require('fs');
-const archiver = require('archiver');
-const slugify = require('slugify');
+const { buildDomain: buildDomainService, downloadDomain: downloadDomainService, getDomainStatus: getDomainStatusService } = require('../../../services/domain/domainBuildService');
 
 // ===== DOMAIN CRUD OPERATIONS =====
 
@@ -13,34 +10,18 @@ const slugify = require('slugify');
 async function createDomain(req, res) {
     try {
         const { name, slug, url, tags, template, domains } = req.body;
-        let results = [];
         // Bulk add
         if (Array.isArray(domains)) {
-            for (const d of domains) {
-                try {
-                    const domainData = {
-                        name: d.name || d,
-                        slug: d.slug || d.name?.toLowerCase().replace(/\s+/g, '-') || d.toLowerCase().replace(/\s+/g, '-'),
-                        url: d.url || '',
-                        tags: Array.isArray(tags) ? tags.join(',') : tags || '',
-                    };
-                    const created = await domainService.createDomain(domainData);
-                    if (template) {
-                        await staticGen.createDomainFolder(domainData.slug, template);
+            const results = await domainService.bulkCreateDomains(domains, tags);
+            // Handle template creation for successful domains
+            for (const result of results) {
+                if (result.success && template) {
+                    try {
+                        await staticGen.createDomainFolder(result.domain, template);
+                    } catch (templateErr) {
+                        // Log but don't fail the whole operation
+                        console.warn(`Failed to create template for domain ${result.domain}:`, templateErr.message);
                     }
-                    results.push({ domain: domainData.slug, success: true, id: created.id });
-                } catch (err) {
-                    let errorMessage = 'Unknown error occurred';
-                    if (err.code === 'P2002') {
-                        errorMessage = `Domain with slug '${d.slug || d.name || d}' already exists`;
-                    } else if (err.message.includes('Invalid')) {
-                        errorMessage = `Invalid data for domain '${d.name || d}': ${err.message}`;
-                    } else if (err.message.includes('required')) {
-                        errorMessage = `Missing required fields for domain '${d.name || d}': ${err.message}`;
-                    } else {
-                        errorMessage = err.message;
-                    }
-                    results.push({ domain: d.name || d, success: false, error: errorMessage });
                 }
             }
             return res.json({ results });
@@ -636,64 +617,10 @@ async function addArticleToDomain(req, res) {
 async function buildDomain(req, res) {
     try {
         const { domainName } = req.params;
-        const domainsBase = path.resolve(__dirname, '../../../../astro-builds/domains');
-        const domainPath = path.join(domainsBase, domainName);
-        const fs = require('fs-extra');
-
-        // Check if domain project exists
-        if (!fs.existsSync(domainPath)) {
-            return res.status(404).json({
-                success: false,
-                message: 'Astro project directory not found'
-            });
-        }
-
-        // Check if package.json exists
-        const packageJsonPath = path.join(domainPath, 'package.json');
-        if (!fs.existsSync(packageJsonPath)) {
-            return res.status(404).json({
-                success: false,
-                message: 'package.json not found in Astro project'
-            });
-        }
-        
-        // Run npm run build
-        const buildCommand = process.platform === 'win32' ? 'npm.cmd run build' : 'npm run build';
-
-        exec(buildCommand, { cwd: domainPath }, (error, stdout, stderr) => {
-            if (error) {
-                console.error('Build error:', error);
-                return res.status(500).json({
-                    success: false,
-                    message: 'Build failed',
-                    error: error.message,
-                    stderr: stderr
-                });
-            }
-
-            // Check if dist folder was created
-            const distPath = path.join(domainPath, 'dist');
-            if (!fs.existsSync(distPath)) {
-                return res.status(500).json({
-                    success: false,
-                    message: 'Build completed but dist folder not found'
-                });
-            }
-
-            res.json({
-                success: true,
-                message: 'Site built successfully',
-                stdout: stdout
-            });
-        });
-
+        const { stdout } = await buildDomainService(domainName);
+        res.json({ success: true, message: 'Site built successfully', stdout });
     } catch (error) {
-        console.error('Build controller error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Internal server error',
-            error: error.message
-        });
+        res.status(error.status || 500).json({ success: false, message: error.message, stderr: error.stderr });
     }
 }
 
@@ -780,60 +707,11 @@ async function buildDomain(req, res) {
 async function downloadDomain(req, res) {
     try {
         const { domainName } = req.params;
-        const domainsBase = path.resolve(__dirname, '../../../../astro-builds/domains');
-        const domainPath = path.join(domainsBase, domainName);
-        const distPath = path.join(domainPath, 'dist');
-
-        // Check if dist folder exists
-        if (!fs.existsSync(distPath)) {
-            return res.status(404).json({
-                success: false,
-                message: 'No built site found. Please run build first.'
-            });
-        }
-
-        // Generate filename with timestamp
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-        const filename = slugify(`${domainName}-${timestamp}`, { lower: true, strict: true }) + '.zip';
-
-        // Set response headers
-        res.setHeader('Content-Type', 'application/zip');
-        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-
-        // Create zip archive
-        const archive = archiver('zip', {
-            zlib: { level: 5 }
-        });
-
-        // Handle archive errors
-        archive.on('error', (err) => {
-            console.error('Archive error:', err);
-            if (!res.headersSent) {
-                res.status(500).json({
-                    success: false,
-                    message: 'Failed to create zip archive',
-                    error: err.message
-                });
-            }
-        });
-
-        // Pipe archive to response
-        archive.pipe(res);
-
-        // Add dist folder to archive
-        archive.directory(distPath, false);
-
-        // Finalize the archive
-        await archive.finalize();
-
+        await downloadDomainService(domainName, res);
+        // service handles streaming + headers
     } catch (error) {
-        console.error('Download controller error:', error);
         if (!res.headersSent) {
-            res.status(500).json({
-                success: false,
-                message: 'Internal server error',
-                error: error.message
-            });
+            res.status(error.status || 500).json({ success: false, message: error.message });
         }
     }
 }
@@ -842,71 +720,10 @@ async function downloadDomain(req, res) {
 async function getDomainStatus(req, res) {
     try {
         const { domainName } = req.params;
-        const domainsBase = path.resolve(__dirname, '../../../../astro-builds/domains');
-        const domainPath = path.join(domainsBase, domainName);
-        const fs = require('fs-extra');
-
-        if (!await fs.pathExists(domainPath)) {
-            return res.status(404).json({
-                error: 'Domain not found',
-                details: `Domain '${domainName}' does not exist`,
-                suggestion: 'Please create the domain first using createDomainFolder'
-            });
-        }
-
-        // Check if node_modules exists
-        const hasNodeModules = await fs.pathExists(path.join(domainPath, 'node_modules'));
-
-        // Check if dist folder exists (built)
-        const hasDist = await fs.pathExists(path.join(domainPath, 'dist'));
-
-        // Get domain info
-        const domainInfo = await staticGen.getDomainInfo(domainName);
-
-        // Count posts
-        const postsDir = path.join(domainPath, 'src', 'content', 'posts');
-        let postCount = 0;
-        if (await fs.pathExists(postsDir)) {
-            const posts = await fs.readdir(postsDir);
-            postCount = posts.filter(file => file.endsWith('.md')).length;
-        }
-
-        res.json({
-            success: true,
-            domainName,
-            status: {
-                exists: true,
-                hasNodeModules,
-                hasDist,
-                postCount,
-                layout: domainInfo.layout,
-                lastModified: domainInfo.lastModified
-            }
-        });
+        const result = await getDomainStatusService(domainName);
+        res.json({ success: true, ...result });
     } catch (err) {
-        let errorMessage = 'Failed to get domain status';
-        let statusCode = 500;
-
-        if (err.message.includes('not found')) {
-            errorMessage = `Domain '${req.params.domainName}' not found`;
-            statusCode = 404;
-        } else if (err.message.includes('ENOENT')) {
-            errorMessage = 'Domain directory not found.';
-            statusCode = 404;
-        } else if (err.message.includes('permission')) {
-            errorMessage = 'Permission denied accessing domain directory.';
-            statusCode = 403;
-        } else if (err.message.includes('timeout')) {
-            errorMessage = 'File system operation timed out. Please try again.';
-            statusCode = 408;
-        } else {
-            errorMessage = err.message;
-        }
-
-        res.status(statusCode).json({
-            error: errorMessage,
-            timestamp: new Date().toISOString()
-        });
+        res.status(err.status || 500).json({ error: err.message });
     }
 }
 

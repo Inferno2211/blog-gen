@@ -1,5 +1,12 @@
 const { addBlogToDomain, updateBlogInDomain, createVersionFromEditor, createVersionFromEditorDirect } = require('../../../services/articles/coreServices');
 const articleService = require('../../../services/articles/dbCrud');
+// Alias service-layer functions to avoid name collisions with controller handlers
+const { 
+    publishArticle, 
+    editArticleContent: editArticleContentService, 
+    updatePublishedFile: updatePublishedFileService 
+} = require('../../../services/articles/articlePublishingService');
+const ValidationService = require('../../../services/ValidationService');
 const staticGen = require('../../../services/domain/staticGen');
 
 // GET /api/v1/articles
@@ -64,71 +71,11 @@ async function setSelectedVersion(req, res) {
 async function publishBlog(req, res) {
     try {
         const { id } = req.params;
-
-        // 1. Get article and domain
-        const article = await articleService.getArticle(id);
-        if (!article) {
-            return res.status(404).json({
-                error: 'Article not found',
-                details: `No article found with ID: ${id}`
-            });
-        }
-
-        if (!article.domain) {
-            return res.status(400).json({
-                error: 'Article has no domain',
-                details: 'Please assign a domain to this article before publishing'
-            });
-        }
-
-        // 2. Check if article has selected version
-        if (!article.selected_version_id) {
-            return res.status(400).json({
-                error: 'No selected version for this article',
-                details: 'Please select a version before publishing'
-            });
-        }
-
-        // 3. Check domain folder exists
-        const domainSlug = article.domain.slug;
-        const domainFolder = staticGen.DOMAINS_BASE + '/' + domainSlug;
-        const fs = require('fs-extra');
-
-        if (!await fs.pathExists(domainFolder)) {
-            return res.status(400).json({
-                error: 'Domain folder does not exist',
-                details: `Domain folder '${domainSlug}' not found`,
-                suggestion: 'Please create the domain folder first'
-            });
-        }
-
-        // 4. Use addArticleToDomain for proper formatting
-        const result = await addBlogToDomain(id, domainSlug);
-
-        if (!result.success) {
-            return res.status(400).json({
-                error: 'Failed to publish blog',
-                details: result.message || 'Unknown error occurred'
-            });
-        }
-
-        // 5. Set status to published
-        await articleService.updateArticle(id, { status: 'PUBLISHED' });
-
-        res.json({
-            success: true,
-            message: 'Blog published successfully!',
-            articleId: id,
-            file: result.fileName,
-            filePath: result.filePath,
-            sanitizedSlug: result.sanitizedSlug,
-            originalSlug: result.originalSlug,
-            article: result.article
-        });
-
+        const result = await publishArticle(id);
+        res.json(result);
     } catch (err) {
         let errorMessage = 'Failed to publish blog';
-        let statusCode = 500;
+        let statusCode = err.status || 500;
 
         if (err.message.includes('article not found')) {
             errorMessage = `Article with ID '${req.params.id}' not found`;
@@ -186,14 +133,14 @@ async function updatePublishedFile(req, res) {
     try {
         const { id } = req.params;
         const { domainName } = req.body;
-        if (!domainName) return res.status(400).json({ error: 'Missing domainName' });
-        const result = await updateBlogInDomain(id, domainName);
-        res.json({ success: true, ...result });
+    const result = await updatePublishedFileService(id, domainName);
+        res.json(result);
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(err.status || 500).json({ error: err.message });
     }
 }
 
+// PUT /api/v1/articles/:id/edit-content
 // PUT /api/v1/articles/:id/edit-content
 async function editArticleContent(req, res) {
     try {
@@ -205,62 +152,12 @@ async function editArticleContent(req, res) {
             useAI = false  // Default to direct editing without AI
         } = req.body;
 
-        if (!content_md) {
-            return res.status(400).json({ error: 'Missing content_md' });
-        }
-
-        // Get the current article to check status
-        const article = await articleService.getArticle(id);
-        if (!article) {
-            return res.status(404).json({ error: 'Article not found' });
-        }
-
-        // Choose editing method based on useAI flag
-        const result = useAI
-            ? await createVersionFromEditor(id, content_md, { model, provider })
-            : await createVersionFromEditorDirect(id, content_md);
-
-        // If the article is published, also update the file
-        if (article.status === 'PUBLISHED' && article.domain && article.domain.slug) {
-            // Set this version as selected first
-            await articleService.setSelectedVersion(id, result.versionId);
-
-            // Update the published file
-            const updateResult = await updateBlogInDomain(id, article.domain.slug);
-
-            return res.json({
-                success: true,
-                message: `Article content updated ${useAI ? 'with AI processing' : 'directly'} and published file synchronized`,
-                articleId: id,
-                versionId: result.versionId,
-                versionNum: result.versionNum,
-                content: result.content,
-                qcResult: result.qcResult,
-                status: result.status,
-                fileUpdated: true,
-                filePath: updateResult.filePath,
-                fileName: updateResult.fileName,
-                editMethod: useAI ? 'AI_PROCESSED' : 'DIRECT_EDIT'
-            });
-        }
-
-        // For unpublished articles, just create the version
-        res.json({
-            success: true,
-            message: `Article content updated ${useAI ? 'with AI processing' : 'directly'} in database`,
-            articleId: id,
-            versionId: result.versionId,
-            versionNum: result.versionNum,
-            content: result.content,
-            qcResult: result.qcResult,
-            status: result.status,
-            fileUpdated: false,
-            editMethod: useAI ? 'AI_PROCESSED' : 'DIRECT_EDIT'
-        });
+    const result = await editArticleContentService(id, content_md, { model, provider, useAI });
+        res.json(result);
 
     } catch (err) {
         let errorMessage = 'Failed to edit article content';
-        let statusCode = 500;
+        let statusCode = err.status || 500;
 
         if (err.message.includes('not found')) {
             errorMessage = err.message;
@@ -292,49 +189,29 @@ async function integrateBacklink(req, res) {
         const { articleId, backlinkUrl, anchorText, model, provider } = req.body;
 
         // Input validation
-        if (!articleId) {
+        const validationService = new ValidationService();
+        const requiredValidation = validationService.validateRequired(req.body, ['articleId', 'backlinkUrl', 'anchorText']);
+        if (!requiredValidation.isValid) {
             return res.status(400).json({
-                error: 'Missing required field: articleId',
-                code: 'MISSING_ARTICLE_ID'
-            });
-        }
-
-        if (!backlinkUrl) {
-            return res.status(400).json({
-                error: 'Missing required field: backlinkUrl',
-                code: 'MISSING_BACKLINK_URL'
-            });
-        }
-
-        if (!anchorText) {
-            return res.status(400).json({
-                error: 'Missing required field: anchorText',
-                code: 'MISSING_ANCHOR_TEXT'
+                error: requiredValidation.message,
+                code: 'MISSING_REQUIRED_FIELDS'
             });
         }
 
         // Validate URL format
-        try {
-            new URL(backlinkUrl);
-        } catch {
+        if (!validationService.validateUrl(backlinkUrl)) {
             return res.status(400).json({
                 error: 'Invalid backlink URL format',
                 code: 'INVALID_URL_FORMAT'
             });
         }
 
-        // Validate anchor text length
-        if (anchorText.trim().length === 0) {
+        // Validate anchor text
+        const anchorValidation = validationService.validateAnchorText(anchorText);
+        if (!anchorValidation.isValid) {
             return res.status(400).json({
-                error: 'Anchor text cannot be empty',
-                code: 'EMPTY_ANCHOR_TEXT'
-            });
-        }
-
-        if (anchorText.length > 200) {
-            return res.status(400).json({
-                error: 'Anchor text too long (maximum 200 characters)',
-                code: 'ANCHOR_TEXT_TOO_LONG'
+                error: anchorValidation.message,
+                code: anchorValidation.message.includes('empty') ? 'EMPTY_ANCHOR_TEXT' : 'ANCHOR_TEXT_TOO_LONG'
             });
         }
 
