@@ -1,4 +1,7 @@
 {
+  "scripts": {
+    "test": "jest"
+  },
   "dependencies": {
     "@google/genai": "^1.8.0",
     "@google/generative-ai": "^0.24.1",
@@ -14,5 +17,8 @@
     "jsonwebtoken": "^9.0.2",
     "prisma": "^6.12.0",
     "slugify": "^1.6.6"
+  },
+  "devDependencies": {
+    "jest": "^30.1.3"
   }
 }
