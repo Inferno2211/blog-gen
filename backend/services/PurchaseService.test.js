@@ -463,7 +463,7 @@ describe('PurchaseService', () => {
 // Simple test runner (following the project's pattern)
 function runTests() {
     console.log('Running PurchaseService tests...\n');
-    
+
     // Since we don't have Jest installed, we'll create a simple test runner
     // This is a placeholder - in a real scenario, you'd run: npm test
     console.log('✓ All PurchaseService tests would pass with proper Jest setup');
