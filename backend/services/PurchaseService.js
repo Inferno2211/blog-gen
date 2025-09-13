@@ -275,6 +275,28 @@ class PurchaseService {
         }
     }
 
+    /**
+     * Process refund for a rejected order
+     * @param {string} orderId - The order ID
+     * @param {string} reason - Refund reason
+     * @returns {Promise<Object>} Refund result
+     */
+    async processRefund(orderId, reason = 'Backlink rejected during review') {
+        try {
+            const StripeService = require('./StripeService');
+            const stripeService = new StripeService();
+            
+            const refundResult = await stripeService.processRefund(orderId, reason);
+            
+            console.log(`Refund processed for order ${orderId}:`, refundResult);
+            
+            return refundResult;
+        } catch (error) {
+            console.error(`Failed to process refund for order ${orderId}:`, error);
+            throw error;
+        }
+    }
+
     // Private helper methods
 
     /**

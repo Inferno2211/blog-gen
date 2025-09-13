@@ -1,6 +1,7 @@
 const PurchaseService = require('../../../services/PurchaseService');
 const SessionService = require('../../../services/SessionService');
 const EmailService = require('../../../services/EmailService');
+const StripeService = require('../../../services/StripeService');
 const { ValidationError, NotFoundError, ConflictError } = require('../../../services/errors');
 
 /**
@@ -12,6 +13,7 @@ class PurchaseController {
         this.purchaseService = new PurchaseService();
         this.sessionService = new SessionService();
         this.emailService = new EmailService();
+        this.stripeService = new StripeService();
     }
 
     /**
@@ -118,8 +120,11 @@ class PurchaseController {
                 });
             }
 
-            // Generate Stripe checkout URL (placeholder for now)
-            const stripeCheckoutUrl = this._generateStripeCheckoutUrl(result.sessionData);
+            // Create Stripe checkout session
+            const checkoutSession = await this.stripeService.createCheckoutSession(
+                result.sessionData.sessionId,
+                result.sessionData
+            );
 
             res.status(200).json({
                 success: true,
@@ -127,7 +132,9 @@ class PurchaseController {
                 data: {
                     valid: true,
                     sessionData: result.sessionData,
-                    stripeCheckoutUrl: stripeCheckoutUrl
+                    stripeCheckoutUrl: checkoutSession.url,
+                    stripeSessionId: checkoutSession.sessionId,
+                    expiresAt: checkoutSession.expiresAt
                 }
             });
 
@@ -151,7 +158,10 @@ class PurchaseController {
                 throw new ValidationError('Stripe session ID is required');
             }
 
-            // Complete payment processing
+            // Process payment success through Stripe
+            const paymentResult = await this.stripeService.processPaymentSuccess(stripeSessionId);
+            
+            // Complete purchase processing
             const result = await this.purchaseService.completePayment(sessionId, stripeSessionId);
 
             // Send order confirmation email
@@ -228,24 +238,65 @@ class PurchaseController {
         }
     }
 
-    // Private helper methods
+    /**
+     * POST /api/v1/purchase/webhook
+     * Handle Stripe webhook events
+     */
+    async handleWebhook(req, res, next) {
+        try {
+            const signature = req.headers['stripe-signature'];
+            const payload = req.body;
+
+            if (!signature) {
+                throw new ValidationError('Missing Stripe signature header');
+            }
+
+            // Verify webhook signature and get event
+            const event = this.stripeService.verifyWebhookSignature(payload, signature);
+            
+            // Handle the webhook event
+            const result = await this.stripeService.handleWebhookEvent(event);
+            
+            console.log(`Webhook handled: ${event.type}`, result);
+
+            res.status(200).json({
+                success: true,
+                message: 'Webhook processed successfully',
+                data: {
+                    eventType: event.type,
+                    handled: result.handled
+                }
+            });
+
+        } catch (error) {
+            console.error('Webhook handling error:', error);
+            next(error);
+        }
+    }
 
     /**
-     * Generate Stripe checkout URL (placeholder implementation)
-     * @private
+     * GET /api/v1/purchase/payment-status/:orderId
+     * Get payment status for an order
      */
-    _generateStripeCheckoutUrl(sessionData) {
-        // This is a placeholder - in a real implementation, this would create a Stripe checkout session
-        // and return the actual checkout URL
-        const baseUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-        const checkoutParams = new URLSearchParams({
-            session_id: sessionData.sessionId,
-            article_id: sessionData.articleId,
-            amount: '1500', // $15.00 in cents
-            currency: 'usd'
-        });
-        
-        return `${baseUrl}/checkout?${checkoutParams.toString()}`;
+    async getPaymentStatus(req, res, next) {
+        try {
+            const { orderId } = req.params;
+
+            if (!orderId) {
+                throw new ValidationError('Order ID is required');
+            }
+
+            const paymentStatus = await this.stripeService.getPaymentStatus(orderId);
+
+            res.status(200).json({
+                success: true,
+                message: 'Payment status retrieved successfully',
+                data: paymentStatus
+            });
+
+        } catch (error) {
+            next(error);
+        }
     }
 }
 
@@ -269,5 +320,15 @@ module.exports = {
     async getOrderStatus(req, res, next) {
         const controller = new PurchaseController();
         return controller.getOrderStatus(req, res, next);
+    },
+
+    async handleWebhook(req, res, next) {
+        const controller = new PurchaseController();
+        return controller.handleWebhook(req, res, next);
+    },
+
+    async getPaymentStatus(req, res, next) {
+        const controller = new PurchaseController();
+        return controller.getPaymentStatus(req, res, next);
     }
 };
