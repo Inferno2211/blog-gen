@@ -207,8 +207,7 @@ class PurchaseService {
                 where: { id: orderId },
                 include: {
                     session: true,
-                    article: true,
-                    version: true
+                    article: true
                 }
             });
 
@@ -225,7 +224,7 @@ class PurchaseService {
                 estimatedCompletion: estimatedCompletion,
                 orderDetails: {
                     orderId: order.id,
-                    articleTitle: order.article.slug,
+                    articleTitle: order.article ? order.article.slug : 'Unknown Article',
                     backlinkData: order.backlink_data,
                     createdAt: order.created_at,
                     completedAt: order.completed_at
@@ -233,6 +232,12 @@ class PurchaseService {
             };
         } catch (error) {
             console.error('Failed to get order status:', error);
+            
+            // Re-throw the original error if it's "Order not found"
+            if (error.message === 'Order not found') {
+                throw error;
+            }
+            
             throw new Error(`Failed to get order status: ${error.message}`);
         }
     }

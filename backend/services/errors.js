@@ -1,5 +1,41 @@
 const { Prisma } = require('@prisma/client');
 
+// Custom error classes
+class AppError extends Error {
+    constructor(message, statusCode = 500, code = 'APP_ERROR') {
+        super(message);
+        this.statusCode = statusCode;
+        this.status = statusCode;
+        this.code = code;
+        this.isOperational = true;
+        Error.captureStackTrace(this, this.constructor);
+    }
+}
+
+class ValidationError extends AppError {
+    constructor(message) {
+        super(message, 400, 'VALIDATION_ERROR');
+    }
+}
+
+class NotFoundError extends AppError {
+    constructor(message = 'Resource not found') {
+        super(message, 404, 'NOT_FOUND');
+    }
+}
+
+class ConflictError extends AppError {
+    constructor(message) {
+        super(message, 409, 'CONFLICT');
+    }
+}
+
+class UnauthorizedError extends AppError {
+    constructor(message = 'Unauthorized access') {
+        super(message, 401, 'UNAUTHORIZED');
+    }
+}
+
 function errorHandler(err, req, res, next) {
     // Authentication and Authorization errors
     if (err.name === 'UnauthorizedError' || err.status === 401) {
@@ -71,4 +107,11 @@ function errorHandler(err, req, res, next) {
     });
 }
 
-module.exports = { errorHandler }; 
+module.exports = { 
+    errorHandler,
+    AppError,
+    ValidationError,
+    NotFoundError,
+    ConflictError,
+    UnauthorizedError
+}; 
