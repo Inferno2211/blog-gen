@@ -30,6 +30,31 @@ enum BacklinkReviewStatus {
   REJECTED
 }
 
+enum ArticleAvailabilityStatus {
+  AVAILABLE
+  SOLD_OUT
+  PROCESSING
+}
+
+enum PurchaseSessionStatus {
+  PENDING_AUTH
+  AUTHENTICATED
+  PAYMENT_PENDING
+  PAID
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum OrderStatus {
+  PROCESSING
+  QUALITY_CHECK
+  ADMIN_REVIEW
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
 model Domain {
   id         String   @id @default(uuid()) @db.Uuid
   slug       String   @unique
@@ -55,6 +80,11 @@ model Article {
   keyword              String?
   backlink_target      String?
   anchor               String?
+  
+  // Purchase system fields
+  availability_status  ArticleAvailabilityStatus @default(AVAILABLE)
+  pending_backlink_count Int @default(0)
+  last_backlink_added  DateTime? @db.Timestamptz
 
   domain               Domain?         @relation(fields: [domain_id], references: [id], onDelete: Cascade)
 
@@ -64,6 +94,10 @@ model Article {
 
   // all versions (1:many)
   versions             ArticleVersion[] @relation("AllVersions")
+  
+  // purchase sessions and orders
+  purchase_sessions    PurchaseSession[]
+  orders              Order[]
 
   @@map("articles")
 }
@@ -91,6 +125,9 @@ model ArticleVersion {
 
   // optional back-reference for selected version (can be omitted if not needed)
   selected_for Article? @relation("SelectedVersion")
+  
+  // orders that reference this version
+  orders Order[]
 
   @@unique([article_id, version_num])
   @@map("article_versions")
@@ -106,4 +143,44 @@ model Admin {
   last_login DateTime? @db.Timestamptz
 
   @@map("admins")
+}
+
+model PurchaseSession {
+  id                    String                @id @default(uuid()) @db.Uuid
+  email                 String
+  article_id            String                @db.Uuid
+  backlink_data         Json                  // { keyword, target_url, notes? }
+  status                PurchaseSessionStatus @default(PENDING_AUTH)
+  stripe_session_id     String?
+  magic_link_token      String                @unique
+  magic_link_expires    DateTime              @db.Timestamptz
+  created_at            DateTime              @default(now()) @db.Timestamptz
+  updated_at            DateTime              @updatedAt @db.Timestamptz
+
+  // Relations
+  article               Article               @relation(fields: [article_id], references: [id], onDelete: Cascade)
+  orders                Order[]
+
+  @@map("purchase_sessions")
+}
+
+model Order {
+  id                    String      @id @default(uuid()) @db.Uuid
+  session_id            String      @db.Uuid
+  article_id            String      @db.Uuid
+  version_id            String?     @db.Uuid  // Created after backlink integration
+  customer_email        String
+  backlink_data         Json        // { keyword, target_url, notes? }
+  payment_data          Json        // { stripe_session_id, amount, currency, status }
+  status                OrderStatus @default(PROCESSING)
+  created_at            DateTime    @default(now()) @db.Timestamptz
+  completed_at          DateTime?   @db.Timestamptz
+  updated_at            DateTime    @updatedAt @db.Timestamptz
+
+  // Relations
+  session               PurchaseSession @relation(fields: [session_id], references: [id], onDelete: Cascade)
+  article               Article         @relation(fields: [article_id], references: [id], onDelete: Cascade)
+  version               ArticleVersion? @relation(fields: [version_id], references: [id], onDelete: SetNull)
+
+  @@map("orders")
 }
