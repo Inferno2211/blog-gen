@@ -1,10 +1,10 @@
 const { addBlogToDomain, updateBlogInDomain, createVersionFromEditor, createVersionFromEditorDirect } = require('../../../services/articles/coreServices');
 const articleService = require('../../../services/articles/dbCrud');
 // Alias service-layer functions to avoid name collisions with controller handlers
-const { 
-    publishArticle, 
-    editArticleContent: editArticleContentService, 
-    updatePublishedFile: updatePublishedFileService 
+const {
+    publishArticle,
+    editArticleContent: editArticleContentService,
+    updatePublishedFile: updatePublishedFileService
 } = require('../../../services/articles/articlePublishingService');
 const ValidationService = require('../../../services/ValidationService');
 const staticGen = require('../../../services/domain/staticGen');
@@ -133,7 +133,7 @@ async function updatePublishedFile(req, res) {
     try {
         const { id } = req.params;
         const { domainName } = req.body;
-    const result = await updatePublishedFileService(id, domainName);
+        const result = await updatePublishedFileService(id, domainName);
         res.json(result);
     } catch (err) {
         res.status(err.status || 500).json({ error: err.message });
@@ -152,7 +152,7 @@ async function editArticleContent(req, res) {
             useAI = false  // Default to direct editing without AI
         } = req.body;
 
-    const result = await editArticleContentService(id, content_md, { model, provider, useAI });
+        const result = await editArticleContentService(id, content_md, { model, provider, useAI });
         res.json(result);
 
     } catch (err) {
@@ -279,7 +279,7 @@ async function integrateBacklink(req, res) {
 async function getBacklinkReviewQueue(req, res) {
     try {
         const { status = 'PENDING_REVIEW', sortBy = 'created_at', sortOrder = 'desc' } = req.query;
-        
+
         const articles = await articleService.getBacklinkReviewQueue(status, sortBy, sortOrder);
         res.json(articles);
     } catch (err) {
@@ -329,6 +329,50 @@ async function approveAndPublish(req, res) {
     }
 }
 
+// GET /api/v1/articles/browse - Public endpoint for homepage article browsing
+async function browseArticles(req, res) {
+    try {
+        const articles = await articleService.getBrowseArticles();
+
+        // Generate previews for all articles
+        const articlesWithPreviews = articles.map(article =>
+            articleService.generateArticlePreview(article)
+        );
+
+        res.json({
+            articles: articlesWithPreviews,
+            total: articlesWithPreviews.length,
+            timestamp: new Date().toISOString()
+        });
+    } catch (err) {
+        res.status(500).json({
+            error: 'Failed to fetch articles for browsing',
+            message: err.message,
+            timestamp: new Date().toISOString()
+        });
+    }
+}
+
+// GET /api/v1/articles/:id/availability - Check real-time availability
+async function checkArticleAvailability(req, res) {
+    try {
+        const { id } = req.params;
+        const availability = await articleService.getArticleAvailability(id);
+
+        res.json({
+            articleId: id,
+            ...availability,
+            timestamp: new Date().toISOString()
+        });
+    } catch (err) {
+        res.status(500).json({
+            error: 'Failed to check article availability',
+            message: err.message,
+            timestamp: new Date().toISOString()
+        });
+    }
+}
+
 module.exports = {
     getAllArticles,
     getArticle,
@@ -344,5 +388,7 @@ module.exports = {
     getBacklinkReviewQueue,
     approveBacklink,
     rejectBacklink,
-    approveAndPublish
+    approveAndPublish,
+    browseArticles,
+    checkArticleAvailability
 }; 

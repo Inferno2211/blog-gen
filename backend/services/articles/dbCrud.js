@@ -164,6 +164,130 @@ async function approveAndPublish(versionId, adminId, reviewNotes) {
     }
 }
 
+// Browse articles for public homepage with availability status
+async function getBrowseArticles() {
+    return await prisma.article.findMany({
+        where: {
+            status: 'PUBLISHED' // Only show published articles
+        },
+        select: {
+            id: true,
+            slug: true,
+            topic: true,
+            niche: true,
+            keyword: true,
+            availability_status: true,
+            pending_backlink_count: true,
+            last_backlink_added: true,
+            created_at: true,
+            domain: {
+                select: {
+                    name: true,
+                    slug: true
+                }
+            },
+            selected_version: {
+                select: {
+                    id: true,
+                    content_md: true,
+                    created_at: true
+                }
+            }
+        },
+        orderBy: {
+            created_at: 'desc'
+        }
+    });
+}
+
+// Get article availability status
+async function getArticleAvailability(articleId) {
+    const article = await prisma.article.findUnique({
+        where: { id: articleId },
+        select: {
+            id: true,
+            availability_status: true,
+            pending_backlink_count: true,
+            status: true
+        }
+    });
+
+    if (!article) {
+        return { available: false, reason: 'Article not found' };
+    }
+
+    if (article.status !== 'PUBLISHED') {
+        return { available: false, reason: 'Article not published' };
+    }
+
+    if (article.availability_status === 'SOLD_OUT') {
+        return { available: false, reason: 'Article sold out - backlink pending review' };
+    }
+
+    if (article.availability_status === 'PROCESSING') {
+        return { available: false, reason: 'Article currently being processed' };
+    }
+
+    return { available: true };
+}
+
+// Update article availability status
+async function updateArticleAvailability(articleId, status) {
+    return await prisma.article.update({
+        where: { id: articleId },
+        data: { 
+            availability_status: status,
+            updated_at: new Date()
+        }
+    });
+}
+
+// Generate article preview for homepage display
+function generateArticlePreview(article) {
+    if (!article.selected_version?.content_md) {
+        return {
+            id: article.id,
+            slug: article.slug,
+            title: article.topic || 'Untitled Article',
+            preview: 'No content available',
+            availability_status: article.availability_status,
+            domain: article.domain?.name || 'Unknown Domain',
+            created_at: article.created_at
+        };
+    }
+
+    const content = article.selected_version.content_md;
+    
+    // Extract title from markdown (first # heading or use topic)
+    const titleMatch = content.match(/^#\s+(.+)$/m);
+    const title = titleMatch ? titleMatch[1].trim() : (article.topic || 'Untitled Article');
+    
+    // Generate preview text (first paragraph, max 200 chars)
+    const contentWithoutTitle = content.replace(/^#\s+.+$/m, '').trim();
+    const firstParagraph = contentWithoutTitle.split('\n\n')[0] || contentWithoutTitle.split('\n')[0] || '';
+    const cleanPreview = firstParagraph
+        .replace(/[#*_`\[\]]/g, '') // Remove markdown formatting
+        .replace(/\n/g, ' ') // Replace newlines with spaces
+        .trim();
+    
+    const preview = cleanPreview.length > 200 
+        ? cleanPreview.substring(0, 200) + '...' 
+        : cleanPreview;
+
+    return {
+        id: article.id,
+        slug: article.slug,
+        title: title,
+        preview: preview || 'No preview available',
+        availability_status: article.availability_status,
+        domain: article.domain?.name || 'Unknown Domain',
+        niche: article.niche,
+        keyword: article.keyword,
+        created_at: article.created_at,
+        last_backlink_added: article.last_backlink_added
+    };
+}
+
 module.exports = {
     createArticle,
     getArticle,
@@ -174,5 +298,9 @@ module.exports = {
     getBacklinkReviewQueue,
     approveBacklink,
     rejectBacklink,
-    approveAndPublish
+    approveAndPublish,
+    getBrowseArticles,
+    getArticleAvailability,
+    updateArticleAvailability,
+    generateArticlePreview
 };

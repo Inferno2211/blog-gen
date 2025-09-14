@@ -36,4 +36,8 @@ router.post('/approveBacklink/:versionId', authenticateAdmin, articlesController
 router.post('/rejectBacklink/:versionId', authenticateAdmin, articlesController.rejectBacklink);
 router.post('/approveAndPublish/:versionId', authenticateAdmin, articlesController.approveAndPublish);
 
+// Public endpoints for article browsing and availability (no auth required)
+router.get('/browse', articlesController.browseArticles);
+router.get('/:id/availability', articlesController.checkArticleAvailability);
+
 module.exports = router; 
