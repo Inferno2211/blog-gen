@@ -6,9 +6,10 @@ import { getArticleAvailability } from '../services/purchaseService';
 interface ArticleCardProps {
   article: PublicArticle;
   onPurchaseClick: (article: PublicArticle) => void;
+  onPreviewClick: (article: PublicArticle) => void;
 }
 
-export default function ArticleCard({ article, onPurchaseClick }: ArticleCardProps) {
+export default function ArticleCard({ article, onPurchaseClick, onPreviewClick }: ArticleCardProps) {
   const [availability, setAvailability] = useState<'AVAILABLE' | 'SOLD_OUT' | 'PROCESSING' | 'LOADING'>(article.availability_status || 'LOADING');
   const [availabilityReason, setAvailabilityReason] = useState<string>('');
 
@@ -124,6 +125,7 @@ export default function ArticleCard({ article, onPurchaseClick }: ArticleCardPro
           <div className="flex flex-col sm:flex-row gap-2">
             {/* Preview Button */}
             <button
+              onClick={() => onPreviewClick(article)}
               className="inline-flex items-center justify-center px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
               title="Preview article"
             >

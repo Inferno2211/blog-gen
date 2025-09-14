@@ -25,7 +25,15 @@ export async function getBrowseArticles(): Promise<PublicArticle[]> {
   const data = await res.json();
   
   // Backend returns { articles: [...], total: number, timestamp: string }
-  return data.articles || [];
+  const articles = data.articles || [];
+  
+  // Enhance articles with better previews if needed
+  return articles.map((article: any) => ({
+    ...article,
+    preview: article.preview && article.preview.length > 10 
+      ? article.preview 
+      : `Learn about ${article.title}. This article covers ${article.keyword || article.niche || 'important topics'} and provides valuable insights.`
+  }));
 }
 
 // Get article availability status (public endpoint)
@@ -42,13 +50,16 @@ export async function getArticleAvailability(articleId: string): Promise<Article
 }
 
 // Initiate purchase process (public endpoint)
-export async function initiatePurchase(purchaseData: PurchaseRequest): Promise<PurchaseInitiateResponse> {
+export async function initiatePurchase(purchaseData: PurchaseRequest): Promise<any> {
   if (USE_MOCK_DATA) {
     // Simulate API delay
     await new Promise(resolve => setTimeout(resolve, 1500));
     return {
-      sessionId: 'mock-session-' + Date.now(),
-      magicLinkSent: true
+      success: true,
+      data: {
+        sessionId: 'mock-session-' + Date.now(),
+        magicLinkSent: true
+      }
     };
   }
   
@@ -59,8 +70,15 @@ export async function initiatePurchase(purchaseData: PurchaseRequest): Promise<P
     },
     body: JSON.stringify(purchaseData),
   });
-  if (!res.ok) throw new Error("Failed to initiate purchase");
-  return res.json();
+  
+  const data = await res.json();
+  
+  // Handle both success and error responses
+  if (!res.ok) {
+    throw new Error(data.message || "Failed to initiate purchase");
+  }
+  
+  return data;
 }
 
 // Verify session with magic link token (public endpoint)
@@ -94,4 +112,49 @@ export async function getOrderStatus(orderId: string): Promise<OrderStatusRespon
   const res = await fetch(`${API_BASE}/purchase/status/${orderId}`);
   if (!res.ok) throw new Error("Failed to get order status");
   return res.json();
+}
+
+// Get article content for preview (public endpoint)
+export async function getArticleContent(articleId: string): Promise<string> {
+  if (USE_MOCK_DATA) {
+    // Return mock content
+    await new Promise(resolve => setTimeout(resolve, 800));
+    return `# Sample Article Content
+
+This is a sample article content for preview purposes. In a real implementation, this would fetch the actual article content from the backend.
+
+## Introduction
+
+Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
+
+## Main Content
+
+Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
+
+### Subsection
+
+Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.
+
+## Conclusion
+
+Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.`;
+  }
+  
+  try {
+    const res = await fetch(`${API_BASE}/articles/${articleId}/content`);
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      throw new Error(errorData.error || `HTTP ${res.status}: Failed to get article content`);
+    }
+    const data = await res.json();
+    return data.content || '';
+  } catch (error) {
+    console.error('Error fetching article content:', error);
+    // Fallback to a generic preview if the article content fails to load
+    return `# Article Preview
+
+This article is currently being processed. Please check back later for the full content.
+
+**Note:** This is a preview placeholder. The actual article content will be available once processing is complete.`;
+  }
 }

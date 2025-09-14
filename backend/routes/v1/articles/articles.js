@@ -39,5 +39,6 @@ router.post('/approveAndPublish/:versionId', authenticateAdmin, articlesControll
 // Public endpoints for article browsing and availability (no auth required)
 router.get('/browse', articlesController.browseArticles);
 router.get('/:id/availability', articlesController.checkArticleAvailability);
+router.get('/:id/content', articlesController.getArticleContent);
 
 module.exports = router; 

@@ -373,6 +373,46 @@ async function checkArticleAvailability(req, res) {
     }
 }
 
+// GET /api/v1/articles/:id/content - Get article content for preview (public endpoint)
+async function getArticleContent(req, res) {
+    try {
+        const { id } = req.params;
+        
+        // Get article with selected version content
+        const article = await articleService.getArticle(id);
+        
+        if (!article) {
+            return res.status(404).json({
+                error: 'Article not found',
+                timestamp: new Date().toISOString()
+            });
+        }
+
+        // Only return content for published articles
+        if (article.status !== 'PUBLISHED') {
+            return res.status(403).json({
+                error: 'Article is not published',
+                timestamp: new Date().toISOString()
+            });
+        }
+
+        const content = article.selected_version?.content_md || '';
+        
+        res.json({
+            articleId: id,
+            content: content,
+            title: article.topic || 'Untitled Article',
+            timestamp: new Date().toISOString()
+        });
+    } catch (err) {
+        res.status(500).json({
+            error: 'Failed to get article content',
+            message: err.message,
+            timestamp: new Date().toISOString()
+        });
+    }
+}
+
 module.exports = {
     getAllArticles,
     getArticle,
@@ -390,5 +430,6 @@ module.exports = {
     rejectBacklink,
     approveAndPublish,
     browseArticles,
-    checkArticleAvailability
+    checkArticleAvailability,
+    getArticleContent
 }; 

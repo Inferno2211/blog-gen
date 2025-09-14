@@ -24,39 +24,76 @@ function App() {
     <Router>
       <Routes>
         {/* Public routes */}
-        <Route path="/" element={<Homepage />} />
         <Route path="/purchase" element={<Homepage />} />
         <Route path="/verify" element={<VerifySession />} />
         <Route path="/payment/success" element={<PaymentSuccess />} />
         
-        {/* Admin routes */}
-        <Route path="/admin/login" element={<Login />} />
-        <Route
-          path="/admin/*"
-          element={
-            <ProtectedRoute>
-              <Layout>
-                <Routes>
-                  <Route path="/blogs/gen" element={<GenBlogs />} />
-                  <Route path="/blogs/edit" element={<EditBlogs />} />
-                  <Route path="/blogs/edit/:articleId" element={<EditBlogs />} />
-                  <Route path="/blogs" element={<ViewBlogs />} />
-                  <Route path="/backlinks" element={<ManageBacklinks />} />
-                  <Route path="/backlink-review" element={<BacklinkReview />} />
-                  <Route path="/domains/create" element={<CreateDomain />} />
-                  <Route path="/domains" element={<ViewDomains />} />
-                  <Route 
-                    path="/" 
-                    element={<Navigate to={isAuthenticated() ? "/admin/blogs" : "/admin/login"} />} 
-                  />
-                  <Route path="*" element={<Navigate to="/admin/blogs" />} />
-                </Routes>
-              </Layout>
-            </ProtectedRoute>
-          }
+        {/* Admin routes - keep original paths */}
+        <Route path="/login" element={<Login />} />
+        <Route path="/blogs/gen" element={
+          <ProtectedRoute>
+            <Layout>
+              <GenBlogs />
+            </Layout>
+          </ProtectedRoute>
+        } />
+        <Route path="/blogs/edit" element={
+          <ProtectedRoute>
+            <Layout>
+              <EditBlogs />
+            </Layout>
+          </ProtectedRoute>
+        } />
+        <Route path="/blogs/edit/:articleId" element={
+          <ProtectedRoute>
+            <Layout>
+              <EditBlogs />
+            </Layout>
+          </ProtectedRoute>
+        } />
+        <Route path="/blogs" element={
+          <ProtectedRoute>
+            <Layout>
+              <ViewBlogs />
+            </Layout>
+          </ProtectedRoute>
+        } />
+        <Route path="/backlinks" element={
+          <ProtectedRoute>
+            <Layout>
+              <ManageBacklinks />
+            </Layout>
+          </ProtectedRoute>
+        } />
+        <Route path="/backlink-review" element={
+          <ProtectedRoute>
+            <Layout>
+              <BacklinkReview />
+            </Layout>
+          </ProtectedRoute>
+        } />
+        <Route path="/domains/create" element={
+          <ProtectedRoute>
+            <Layout>
+              <CreateDomain />
+            </Layout>
+          </ProtectedRoute>
+        } />
+        <Route path="/domains" element={
+          <ProtectedRoute>
+            <Layout>
+              <ViewDomains />
+            </Layout>
+          </ProtectedRoute>
+        } />
+        
+        {/* Default route - homepage for public, admin dashboard for authenticated */}
+        <Route 
+          path="/" 
+          element={isAuthenticated() ? <Navigate to="/blogs" /> : <Homepage />} 
         />
         
-        {/* Fallback for unknown routes */}
+        {/* Fallback */}
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </Router>

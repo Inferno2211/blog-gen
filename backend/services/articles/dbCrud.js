@@ -5,7 +5,23 @@ async function createArticle(article) {
 }
 
 async function getArticle(id) {
-    return await prisma.article.findUnique({ where: { id }, include: { versions: true, domain: true } });
+    const article = await prisma.article.findUnique({ 
+        where: { id }, 
+        include: { 
+            versions: {
+                orderBy: { version_num: 'desc' }
+            }, 
+            domain: true,
+            selected_version: true
+        } 
+    });
+
+    // If no selected_version but has versions, use the latest version as selected_version
+    if (article && !article.selected_version && article.versions.length > 0) {
+        article.selected_version = article.versions[0];
+    }
+
+    return article;
 }
 
 async function getAllArticles() {
@@ -284,7 +300,7 @@ async function approveAndPublish(versionId, adminId, reviewNotes) {
 
 // Browse articles for public homepage with availability status
 async function getBrowseArticles() {
-    return await prisma.article.findMany({
+    const articles = await prisma.article.findMany({
         where: {
             status: 'PUBLISHED' // Only show published articles
         },
@@ -298,6 +314,7 @@ async function getBrowseArticles() {
             pending_backlink_count: true,
             last_backlink_added: true,
             created_at: true,
+            selected_version_id: true,
             domain: {
                 select: {
                     name: true,
@@ -310,11 +327,39 @@ async function getBrowseArticles() {
                     content_md: true,
                     created_at: true
                 }
+            },
+            versions: {
+                select: {
+                    id: true,
+                    content_md: true,
+                    created_at: true,
+                    version_num: true
+                },
+                orderBy: {
+                    version_num: 'desc'
+                },
+                take: 1
             }
         },
         orderBy: {
             created_at: 'desc'
         }
+    });
+
+    // For each article, ensure we have content from either selected_version or latest version
+    return articles.map(article => {
+        let contentVersion = article.selected_version;
+        
+        // If no selected version or selected version has no content, use latest version
+        if (!contentVersion || !contentVersion.content_md) {
+            contentVersion = article.versions[0] || null;
+        }
+        
+        return {
+            ...article,
+            selected_version: contentVersion,
+            versions: undefined // Remove versions array from response
+        };
     });
 }
 
@@ -363,14 +408,23 @@ async function updateArticleAvailability(articleId, status) {
 // Generate article preview for homepage display
 function generateArticlePreview(article) {
     if (!article.selected_version?.content_md) {
+        // Generate a meaningful preview from article metadata
+        const topicPreview = article.topic ? `Learn about ${article.topic}` : '';
+        const nichePreview = article.niche ? ` in the ${article.niche} space` : '';
+        const keywordPreview = article.keyword ? `. This article focuses on ${article.keyword}` : '';
+        const fallbackPreview = `${topicPreview}${nichePreview}${keywordPreview}. Click to read the full article and discover valuable insights.`;
+        
         return {
             id: article.id,
             slug: article.slug,
-            title: article.topic || 'Untitled Article',
-            preview: 'No content available',
+            title: article.topic || article.slug?.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) || 'Untitled Article',
+            preview: fallbackPreview || 'Click to read this article and discover valuable insights.',
             availability_status: article.availability_status,
             domain: article.domain?.name || 'Unknown Domain',
-            created_at: article.created_at
+            niche: article.niche,
+            keyword: article.keyword,
+            created_at: article.created_at,
+            last_backlink_added: article.last_backlink_added
         };
     }
 
@@ -381,8 +435,16 @@ function generateArticlePreview(article) {
     const title = titleMatch ? titleMatch[1].trim() : (article.topic || 'Untitled Article');
     
     // Generate preview text (first paragraph, max 200 chars)
-    const contentWithoutTitle = content.replace(/^#\s+.+$/m, '').trim();
-    const firstParagraph = contentWithoutTitle.split('\n\n')[0] || contentWithoutTitle.split('\n')[0] || '';
+    // Remove YAML frontmatter first
+    let contentWithoutFrontmatter = content.replace(/^---[\s\S]*?---\s*/m, '').trim();
+    
+    // Remove title if present
+    const contentWithoutTitle = contentWithoutFrontmatter.replace(/^#\s+.+$/m, '').trim();
+    
+    // Get first meaningful paragraph
+    const paragraphs = contentWithoutTitle.split('\n\n').filter(p => p.trim().length > 0);
+    const firstParagraph = paragraphs[0] || contentWithoutTitle.split('\n').find(line => line.trim().length > 0) || '';
+    
     const cleanPreview = firstParagraph
         .replace(/[#*_`\[\]]/g, '') // Remove markdown formatting
         .replace(/\n/g, ' ') // Replace newlines with spaces
@@ -396,7 +458,7 @@ function generateArticlePreview(article) {
         id: article.id,
         slug: article.slug,
         title: title,
-        preview: preview || 'No preview available',
+        preview: preview || `Article about ${article.topic || article.niche || 'various topics'}. Click to learn more about ${article.keyword || 'this subject'}.`,
         availability_status: article.availability_status,
         domain: article.domain?.name || 'Unknown Domain',
         niche: article.niche,

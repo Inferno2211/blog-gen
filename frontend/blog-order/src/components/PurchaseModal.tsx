@@ -81,10 +81,10 @@ export default function PurchaseModal({ article, onClose, onComplete }: Purchase
 
       const result = await initiatePurchase(purchaseRequest);
       
-      if (result.magicLinkSent) {
+      if (result.success && result.data?.magicLinkSent) {
         setStep('email-sent');
       } else {
-        setError('Failed to send magic link. Please try again.');
+        setError(result.message || 'Failed to send magic link. Please try again.');
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to initiate purchase');

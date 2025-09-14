@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { PublicArticle } from '../types/purchase';
 import ArticleCard from './ArticleCard';
 import PurchaseModal from './PurchaseModal';
+import ArticlePreviewModal from './ArticlePreviewModal';
 
 interface ArticleGridProps {
   articles: PublicArticle[];
@@ -11,10 +12,17 @@ interface ArticleGridProps {
 export default function ArticleGrid({ articles, onArticleUpdate }: ArticleGridProps) {
   const [selectedArticle, setSelectedArticle] = useState<PublicArticle | null>(null);
   const [showPurchaseModal, setShowPurchaseModal] = useState(false);
+  const [previewArticle, setPreviewArticle] = useState<PublicArticle | null>(null);
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
 
   const handlePurchaseClick = (article: PublicArticle) => {
     setSelectedArticle(article);
     setShowPurchaseModal(true);
+  };
+
+  const handlePreviewClick = (article: PublicArticle) => {
+    setPreviewArticle(article);
+    setShowPreviewModal(true);
   };
 
   const handlePurchaseComplete = () => {
@@ -28,6 +36,25 @@ export default function ArticleGrid({ articles, onArticleUpdate }: ArticleGridPr
     setSelectedArticle(null);
   };
 
+  const handlePreviewClose = () => {
+    setShowPreviewModal(false);
+    setPreviewArticle(null);
+  };
+
+  // Listen for custom event from preview modal to open purchase modal
+  useEffect(() => {
+    const handleOpenPurchaseModal = (event: CustomEvent) => {
+      const article = event.detail as PublicArticle;
+      handlePreviewClose();
+      setTimeout(() => handlePurchaseClick(article), 100);
+    };
+
+    window.addEventListener('openPurchaseModal', handleOpenPurchaseModal as EventListener);
+    return () => {
+      window.removeEventListener('openPurchaseModal', handleOpenPurchaseModal as EventListener);
+    };
+  }, []);
+
   return (
     <>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -36,6 +63,7 @@ export default function ArticleGrid({ articles, onArticleUpdate }: ArticleGridPr
             key={article.id}
             article={article}
             onPurchaseClick={handlePurchaseClick}
+            onPreviewClick={handlePreviewClick}
           />
         ))}
       </div>
@@ -46,6 +74,14 @@ export default function ArticleGrid({ articles, onArticleUpdate }: ArticleGridPr
           article={selectedArticle}
           onClose={handleModalClose}
           onComplete={handlePurchaseComplete}
+        />
+      )}
+
+      {/* Preview Modal */}
+      {showPreviewModal && previewArticle && (
+        <ArticlePreviewModal
+          article={previewArticle}
+          onClose={handlePreviewClose}
         />
       )}
     </>

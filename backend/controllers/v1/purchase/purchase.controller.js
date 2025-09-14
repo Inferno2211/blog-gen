@@ -66,6 +66,9 @@ class PurchaseController {
             );
 
             // Send magic link email
+            let magicLinkSent = false;
+            let emailError = null;
+            
             try {
                 await this.emailService.sendMagicLink(
                     email,
@@ -76,19 +79,35 @@ class PurchaseController {
                         keyword: keyword
                     }
                 );
-            } catch (emailError) {
-                console.error('Failed to send magic link email:', emailError);
-                // Continue with response even if email fails
+                magicLinkSent = true;
+            } catch (error) {
+                console.error('Failed to send magic link email:', error);
+                emailError = error.message;
+                magicLinkSent = false;
             }
 
-            res.status(200).json({
-                success: true,
-                message: 'Purchase initiated successfully. Please check your email for the magic link.',
-                data: {
-                    sessionId: result.sessionId,
-                    magicLinkSent: true
-                }
-            });
+            // Return appropriate response based on email delivery status
+            if (magicLinkSent) {
+                res.status(200).json({
+                    success: true,
+                    message: 'Purchase initiated successfully. Please check your email for the magic link.',
+                    data: {
+                        sessionId: result.sessionId,
+                        magicLinkSent: true
+                    }
+                });
+            } else {
+                res.status(500).json({
+                    success: false,
+                    message: 'Purchase session created but failed to send magic link email. Please try again.',
+                    error: 'Email delivery failed',
+                    data: {
+                        sessionId: result.sessionId,
+                        magicLinkSent: false,
+                        emailError: emailError
+                    }
+                });
+            }
 
         } catch (error) {
             next(error);
