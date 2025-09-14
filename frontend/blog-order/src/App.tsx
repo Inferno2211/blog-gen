@@ -14,15 +14,25 @@ import CreateDomain from "./pages/CreateDomain";
 import ViewDomains from "./pages/ViewDomains";
 import ManageBacklinks from "./pages/ManageBacklinks";
 import BacklinkReview from "./pages/BacklinkReview";
+import Homepage from "./pages/Homepage";
+import VerifySession from "./pages/VerifySession";
+import PaymentSuccess from "./pages/PaymentSuccess";
 import { isAuthenticated } from "./services/authService";
 
 function App() {
   return (
     <Router>
       <Routes>
-        <Route path="/login" element={<Login />} />
+        {/* Public routes */}
+        <Route path="/" element={<Homepage />} />
+        <Route path="/purchase" element={<Homepage />} />
+        <Route path="/verify" element={<VerifySession />} />
+        <Route path="/payment/success" element={<PaymentSuccess />} />
+        
+        {/* Admin routes */}
+        <Route path="/admin/login" element={<Login />} />
         <Route
-          path="/*"
+          path="/admin/*"
           element={
             <ProtectedRoute>
               <Layout>
@@ -37,14 +47,17 @@ function App() {
                   <Route path="/domains" element={<ViewDomains />} />
                   <Route 
                     path="/" 
-                    element={<Navigate to={isAuthenticated() ? "/blogs" : "/login"} />} 
+                    element={<Navigate to={isAuthenticated() ? "/admin/blogs" : "/admin/login"} />} 
                   />
-                  <Route path="*" element={<Navigate to="/blogs" />} />
+                  <Route path="*" element={<Navigate to="/admin/blogs" />} />
                 </Routes>
               </Layout>
             </ProtectedRoute>
           }
         />
+        
+        {/* Fallback for unknown routes */}
+        <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </Router>
   );
