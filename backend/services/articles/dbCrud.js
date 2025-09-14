@@ -71,9 +71,31 @@ async function approveBacklink(versionId, adminId, reviewNotes) {
                 include: {
                     domain: true
                 }
-            }
+            },
+            orders: true
         }
     });
+
+    // Send customer notifications for any associated orders
+    try {
+        const EmailService = require('../../EmailService');
+        const emailService = new EmailService();
+        
+        for (const order of version.orders) {
+            if (order.status === 'ADMIN_REVIEW') {
+                // Update order status to completed (will be published separately)
+                await prisma.order.update({
+                    where: { id: order.id },
+                    data: { status: 'COMPLETED' }
+                });
+                
+                console.log(`Order ${order.id} approved, customer will be notified when article is published`);
+            }
+        }
+    } catch (error) {
+        console.error('Failed to process order notifications for approved backlink:', error);
+        // Don't fail the approval if notification fails
+    }
 
     return {
         success: true,
@@ -96,9 +118,54 @@ async function rejectBacklink(versionId, adminId, reviewNotes) {
                 include: {
                     domain: true
                 }
-            }
+            },
+            orders: true
         }
     });
+
+    // Process refunds and notifications for any associated orders
+    try {
+        const EmailService = require('../../EmailService');
+        const emailService = new EmailService();
+        
+        for (const order of version.orders) {
+            if (order.status === 'ADMIN_REVIEW') {
+                // Process refund through StripeService
+                try {
+                    const StripeService = require('../../StripeService');
+                    const stripeService = new StripeService();
+                    
+                    const refundResult = await stripeService.processRefund(
+                        order.id, 
+                        reviewNotes || 'Backlink rejected during admin review'
+                    );
+                    
+                    console.log(`Refund processed for rejected order ${order.id}:`, refundResult);
+                    
+                    // Send refund notification email
+                    await emailService.sendRefundNotification(
+                        order.customer_email,
+                        order,
+                        reviewNotes || 'Content quality standards not met'
+                    );
+                    
+                } catch (refundError) {
+                    console.error(`Failed to process refund for order ${order.id}:`, refundError);
+                    // Continue with other orders even if one refund fails
+                }
+            }
+        }
+        
+        // Update article availability back to available
+        await prisma.article.update({
+            where: { id: version.article_id },
+            data: { availability_status: 'AVAILABLE' }
+        });
+        
+    } catch (error) {
+        console.error('Failed to process refunds for rejected backlink:', error);
+        // Don't fail the rejection if refund processing fails
+    }
 
     return {
         success: true,
@@ -108,7 +175,7 @@ async function rejectBacklink(versionId, adminId, reviewNotes) {
 }
 
 async function approveAndPublish(versionId, adminId, reviewNotes) {
-    // First approve the backlink
+    // First approve the backlink and get associated orders
     const approvedVersion = await prisma.articleVersion.update({
         where: { id: versionId },
         data: {
@@ -116,6 +183,14 @@ async function approveAndPublish(versionId, adminId, reviewNotes) {
             review_notes: reviewNotes,
             reviewed_by: adminId,
             reviewed_at: new Date()
+        },
+        include: {
+            orders: true,
+            article: {
+                include: {
+                    domain: true
+                }
+            }
         }
     });
 
@@ -137,11 +212,54 @@ async function approveAndPublish(versionId, adminId, reviewNotes) {
         const publishResult = await addBlogToDomain(approvedVersion.article_id, article.domain.slug);
         
         if (publishResult.success) {
-            // Update article status to published
+            // Update article status to published and make available for new purchases
             await prisma.article.update({
                 where: { id: approvedVersion.article_id },
-                data: { status: 'PUBLISHED' }
+                data: { 
+                    status: 'PUBLISHED',
+                    availability_status: 'AVAILABLE'
+                }
             });
+            
+            // Complete orders and send customer notifications
+            try {
+                const EmailService = require('../../EmailService');
+                const emailService = new EmailService();
+                
+                for (const order of approvedVersion.orders) {
+                    if (order.status === 'ADMIN_REVIEW' || order.status === 'COMPLETED') {
+                        // Mark order as completed with timestamp
+                        await prisma.order.update({
+                            where: { id: order.id },
+                            data: { 
+                                status: 'COMPLETED',
+                                completed_at: new Date()
+                            }
+                        });
+                        
+                        // Send completion notification to customer
+                        const articleData = {
+                            title: article.slug,
+                            slug: article.slug,
+                            published_at: new Date(),
+                            backlinkData: {
+                                keyword: order.backlink_data.keyword,
+                                targetUrl: order.backlink_data.target_url
+                            }
+                        };
+                        
+                        await emailService.sendCompletionNotification(
+                            order.customer_email,
+                            articleData
+                        );
+                        
+                        console.log(`Order ${order.id} completed and customer notified`);
+                    }
+                }
+            } catch (notificationError) {
+                console.error('Failed to send customer notifications:', notificationError);
+                // Don't fail the publish if notifications fail
+            }
             
             return {
                 success: true,

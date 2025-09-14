@@ -18,7 +18,7 @@ class EmailService {
    */
   async sendMagicLink(email, token, sessionData) {
     const magicLinkUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/auth/verify?token=${token}`;
-    
+
     const emailData = {
       from: this.fromEmail,
       to: email,
@@ -90,37 +90,37 @@ class EmailService {
    */
   async _sendEmailWithRetry(emailData, emailType) {
     let lastError;
-    
+
     for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
       try {
         console.log(`Sending ${emailType} email to ${emailData.to} (attempt ${attempt}/${this.maxRetries})`);
-        
+
         const result = await this.resend.emails.send(emailData);
-        
+
         console.log(`Successfully sent ${emailType} email to ${emailData.to}`, {
           emailId: result.data?.id,
           attempt
         });
-        
+
         return {
           success: true,
           emailId: result.data?.id,
           attempt,
           type: emailType
         };
-        
+
       } catch (error) {
         lastError = error;
         console.error(`Failed to send ${emailType} email to ${emailData.to} (attempt ${attempt}/${this.maxRetries}):`, {
           error: error.message,
           statusCode: error.statusCode
         });
-        
+
         // Don't retry on certain errors
         if (this._isNonRetryableError(error)) {
           break;
         }
-        
+
         // Wait before retrying (exponential backoff)
         if (attempt < this.maxRetries) {
           const delay = this.retryDelay * Math.pow(2, attempt - 1);
@@ -128,7 +128,7 @@ class EmailService {
         }
       }
     }
-    
+
     // All retries failed
     console.error(`Failed to send ${emailType} email to ${emailData.to} after ${this.maxRetries} attempts`);
     throw new AppError(`Failed to send ${emailType} email after ${this.maxRetries} attempts: ${lastError.message}`, 500);
@@ -283,7 +283,7 @@ class EmailService {
    */
   _generateCompletionTemplate(articleData) {
     const articleUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/articles/${articleData.slug}`;
-    
+
     return `
       <!DOCTYPE html>
       <html>
