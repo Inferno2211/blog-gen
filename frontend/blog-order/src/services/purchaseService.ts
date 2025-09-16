@@ -90,8 +90,20 @@ export async function verifySession(sessionToken: string): Promise<SessionVerify
     },
     body: JSON.stringify({ sessionToken }),
   });
-  if (!res.ok) throw new Error("Failed to verify session");
-  return res.json();
+  
+  const data = await res.json();
+  
+  if (!res.ok) {
+    throw new Error(data.message || "Failed to verify session");
+  }
+  
+  // Backend returns { success: true, data: { valid: true, stripeCheckoutUrl: "...", ... } }
+  // We need to return the data portion with the correct structure
+  return {
+    valid: data.data?.valid || false,
+    stripeCheckoutUrl: data.data?.stripeCheckoutUrl,
+    sessionData: data.data?.sessionData
+  };
 }
 
 // Complete purchase after payment (public endpoint)

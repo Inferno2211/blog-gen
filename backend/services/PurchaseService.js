@@ -85,16 +85,20 @@ class PurchaseService {
                 return { valid: false, error: 'Session token has expired' };
             }
 
-            // Check if session is in correct state
-            if (session.status !== 'PENDING_AUTH') {
-                return { valid: false, error: 'Session is not in valid state for authentication' };
+            // Check if session is in correct state for verification
+            // Allow PENDING_AUTH, AUTHENTICATED, and PAYMENT_PENDING states
+            const validStatesForVerification = ['PENDING_AUTH', 'AUTHENTICATED', 'PAYMENT_PENDING'];
+            if (!validStatesForVerification.includes(session.status)) {
+                return { valid: false, error: `Session is not in valid state for authentication. Current status: ${session.status}` };
             }
 
-            // Update session status to authenticated
-            await prisma.purchaseSession.update({
-                where: { id: session.id },
-                data: { status: 'AUTHENTICATED' }
-            });
+            // Update session status to authenticated (only if not already authenticated or beyond)
+            if (session.status === 'PENDING_AUTH') {
+                await prisma.purchaseSession.update({
+                    where: { id: session.id },
+                    data: { status: 'AUTHENTICATED' }
+                });
+            }
 
             console.log(`Session verified - Session: ${session.id}, Email: ${session.email}`);
 
@@ -103,8 +107,8 @@ class PurchaseService {
                 sessionData: {
                     sessionId: session.id,
                     email: session.email,
-                    articleId: session.article_id,
-                    backlinkData: session.backlink_data,
+                    article_id: session.article_id,
+                    backlink_data: session.backlink_data,
                     articleTitle: session.article.slug
                 }
             };

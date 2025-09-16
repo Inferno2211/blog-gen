@@ -5,13 +5,18 @@ const dotenv = require('dotenv');
 const { errorHandler } = require('./services/errors');
 const StartupService = require('./services/StartupService');
 
-app.use(express.json());
+// Load environment variables first
 dotenv.config({ silent: true });
 
+// CORS configuration
 app.use(cors({
     origin: 'http://localhost:5173',
     credentials: true,
 }));
+
+// Apply JSON parsing middleware to all routes EXCEPT webhooks
+app.use('/api/v1/purchase/webhook', express.raw({ type: 'application/json' }));
+app.use(express.json());
 
 const appRoutes = require('./routes/index.js');
 app.use('/api', appRoutes);

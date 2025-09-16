@@ -17,7 +17,7 @@ class EmailService {
    * @returns {Promise<Object>} Email send result
    */
   async sendMagicLink(email, token, sessionData) {
-    const magicLinkUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/auth/verify?token=${token}`;
+    const magicLinkUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/verify?token=${token}`;
 
     const emailData = {
       from: this.fromEmail,
