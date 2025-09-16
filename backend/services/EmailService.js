@@ -1,9 +1,9 @@
-const { Resend } = require('resend');
+const sgMail = require('@sendgrid/mail');
 const { AppError } = require('./errors');
 
 class EmailService {
   constructor() {
-    this.resend = new Resend(process.env.RESEND_API_KEY);
+    sgMail.setApiKey(process.env.SENDGRID_API_KEY);
     this.fromEmail = process.env.FROM_EMAIL || 'noreply@yourdomain.com';
     this.maxRetries = 3;
     this.retryDelay = 1000; // 1 second base delay
@@ -83,7 +83,7 @@ class EmailService {
 
   /**
    * Send email with retry logic
-   * @param {Object} emailData - Email data for Resend
+   * @param {Object} emailData - Email data for SendGrid
    * @param {string} emailType - Type of email for logging
    * @returns {Promise<Object>} Email send result
    * @private
@@ -95,16 +95,16 @@ class EmailService {
       try {
         console.log(`Sending ${emailType} email to ${emailData.to} (attempt ${attempt}/${this.maxRetries})`);
 
-        const result = await this.resend.emails.send(emailData);
+        const result = await sgMail.send(emailData);
 
         console.log(`Successfully sent ${emailType} email to ${emailData.to}`, {
-          emailId: result.data?.id,
+          messageId: result[0]?.headers['x-message-id'],
           attempt
         });
 
         return {
           success: true,
-          emailId: result.data?.id,
+          messageId: result[0]?.headers['x-message-id'],
           attempt,
           type: emailType
         };
@@ -113,7 +113,7 @@ class EmailService {
         lastError = error;
         console.error(`Failed to send ${emailType} email to ${emailData.to} (attempt ${attempt}/${this.maxRetries}):`, {
           error: error.message,
-          statusCode: error.statusCode
+          statusCode: error.code
         });
 
         // Don't retry on certain errors
@@ -142,8 +142,10 @@ class EmailService {
    */
   _isNonRetryableError(error) {
     // Don't retry on authentication errors, invalid email addresses, etc.
-    const nonRetryableStatusCodes = [400, 401, 403, 422];
-    return nonRetryableStatusCodes.includes(error.statusCode);
+    // SendGrid error codes: https://docs.sendgrid.com/api-reference/mail-send/errors
+    const nonRetryableCodes = [400, 401, 403, 413, 413];
+    return nonRetryableCodes.includes(error.code) || 
+           (error.response && nonRetryableCodes.includes(error.response.statusCode));
   }
 
   /**
