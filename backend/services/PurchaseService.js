@@ -1,5 +1,6 @@
 const prisma = require('../db/prisma');
 const BacklinkService = require('./BacklinkService');
+const EmailService = require('./EmailService');
 const crypto = require('crypto');
 
 /**
@@ -9,6 +10,7 @@ const crypto = require('crypto');
 class PurchaseService {
     constructor() {
         this.backlinkService = new BacklinkService();
+        this.emailService = new EmailService();
     }
 
     /**
@@ -120,6 +122,7 @@ class PurchaseService {
 
     /**
      * Complete payment and initiate backlink processing
+     * This method handles both webhook-processed payments and manual completion
      * @param {string} sessionId - The purchase session ID
      * @param {string} stripeSessionId - The Stripe checkout session ID
      * @returns {Promise<{orderId: string, status: string}>}
@@ -133,54 +136,82 @@ class PurchaseService {
             // Get the purchase session
             const session = await prisma.purchaseSession.findUnique({
                 where: { id: sessionId },
-                include: { article: true }
+                include: { 
+                    article: true,
+                    orders: {
+                        orderBy: { created_at: 'desc' },
+                        take: 1
+                    }
+                }
             });
 
             if (!session) {
                 throw new Error('Purchase session not found');
             }
 
-            if (session.status !== 'AUTHENTICATED') {
-                throw new Error('Session is not in valid state for payment completion');
+            // Case 1: Webhook already processed the payment (session is PAID)
+            if (session.status === 'PAID') {
+                // Find the order created by the webhook
+                const existingOrder = session.orders[0] || await prisma.order.findFirst({
+                    where: { 
+                        session_id: sessionId,
+                        status: { in: ['PROCESSING', 'ADMIN_REVIEW', 'COMPLETED'] }
+                    },
+                    orderBy: { created_at: 'desc' }
+                });
+
+                if (existingOrder) {
+                    console.log(`Payment already completed by webhook - Order: ${existingOrder.id}, Session: ${sessionId}`);
+                    return {
+                        orderId: existingOrder.id,
+                        status: existingOrder.status
+                    };
+                } else {
+                    throw new Error('Session marked as PAID but no order found');
+                }
             }
 
-            // Create order record
-            const order = await prisma.order.create({
-                data: {
-                    session_id: sessionId,
-                    article_id: session.article_id,
-                    customer_email: session.email,
-                    backlink_data: session.backlink_data,
-                    payment_data: {
-                        stripe_session_id: stripeSessionId,
-                        amount: 1500, // $15.00 in cents
-                        currency: 'usd',
-                        status: 'completed'
-                    },
+            // Case 2: Session is authenticated, we need to complete the payment manually (fallback)
+            if (session.status === 'AUTHENTICATED') {
+                console.log(`Processing payment manually for session ${sessionId} (webhook may have failed)`);
+                
+                // Create order record
+                const order = await prisma.order.create({
+                    data: {
+                        session_id: sessionId,
+                        article_id: session.article_id,
+                        customer_email: session.email,
+                        backlink_data: session.backlink_data,
+                        payment_data: {
+                            stripe_session_id: stripeSessionId,
+                            amount: 1500, // $15.00 in cents
+                            currency: 'usd',
+                            status: 'completed'
+                        },
+                        status: 'PROCESSING'
+                    }
+                });
+
+                // Update session status
+                await prisma.purchaseSession.update({
+                    where: { id: sessionId },
+                    data: { 
+                        status: 'PAID',
+                        stripe_session_id: stripeSessionId
+                    }
+                });
+
+                console.log(`Payment completed manually - Order: ${order.id}, Session: ${sessionId}`);
+
+                return {
+                    orderId: order.id,
                     status: 'PROCESSING'
-                }
-            });
+                };
+            }
 
-            // Update session status
-            await prisma.purchaseSession.update({
-                where: { id: sessionId },
-                data: { 
-                    status: 'PAID',
-                    stripe_session_id: stripeSessionId
-                }
-            });
+            // Case 3: Invalid session state
+            throw new Error(`Session is not in valid state for payment completion. Current status: ${session.status}`);
 
-            console.log(`Payment completed - Order: ${order.id}, Session: ${sessionId}`);
-
-            // Initiate backlink processing asynchronously
-            this._processBacklinkIntegration(order.id).catch(error => {
-                console.error(`Backlink processing failed for order ${order.id}:`, error);
-            });
-
-            return {
-                orderId: order.id,
-                status: 'PROCESSING'
-            };
         } catch (error) {
             console.error('Failed to complete payment:', error);
             throw new Error(`Failed to complete payment: ${error.message}`);
@@ -230,6 +261,7 @@ class PurchaseService {
                     orderId: order.id,
                     articleTitle: order.article ? order.article.slug : 'Unknown Article',
                     backlinkData: order.backlink_data,
+                    customerEmail: order.customer_email,
                     createdAt: order.created_at,
                     completedAt: order.completed_at
                 }
@@ -398,10 +430,10 @@ class PurchaseService {
                 throw new Error('Order not found');
             }
 
-            // Update order status to quality check
+            // Update order status to admin review (skip quality check)
             await prisma.order.update({
                 where: { id: orderId },
-                data: { status: 'QUALITY_CHECK' }
+                data: { status: 'ADMIN_REVIEW' }
             });
 
             // Integrate backlink using BacklinkService
@@ -447,17 +479,304 @@ class PurchaseService {
     }
 
     /**
+     * Get detailed order information for customer backlink configuration
+     * @param {string} orderId - The order ID
+     * @returns {Promise<Object>} Order details with article information
+     */
+    async getOrderDetails(orderId) {
+        if (!orderId) {
+            throw new Error('Order ID is required');
+        }
+
+        try {
+            const order = await prisma.order.findUnique({
+                where: { id: orderId },
+                include: {
+                    session: true,
+                    version: true, // Include the order's specific version
+                    article: {
+                        include: {
+                            domain: true,
+                            selected_version: true,
+                            versions: {
+                                orderBy: { version_num: 'desc' },
+                                take: 1
+                            }
+                        }
+                    }
+                }
+            });
+
+            if (!order) {
+                throw new Error('Order not found');
+            }
+
+            if (order.status !== 'PAID' && order.status !== 'PROCESSING' && order.status !== 'ADMIN_REVIEW') {
+                throw new Error('Order is not in valid state for backlink configuration');
+            }
+
+            return {
+                id: order.id,
+                sessionId: order.session_id,
+                articleId: order.article_id,
+                customerEmail: order.customer_email,
+                backlinkData: order.backlink_data,
+                status: order.status,
+                generatedVersion: order.version ? {
+                    id: order.version.id,
+                    version_num: order.version.version_num,
+                    content_md: order.version.content_md,
+                    backlink_review_status: order.version.backlink_review_status
+                } : null,
+                article: {
+                    id: order.article.id,
+                    slug: order.article.slug,
+                    topic: order.article.topic,
+                    niche: order.article.niche,
+                    keyword: order.article.keyword,
+                    domain: {
+                        slug: order.article.domain.slug,
+                        name: order.article.domain.name
+                    },
+                    selected_version: order.article.selected_version || order.article.versions[0]
+                }
+            };
+        } catch (error) {
+            console.error('Failed to get order details:', error);
+            throw new Error(`Failed to get order details: ${error.message}`);
+        }
+    }
+
+    /**
+     * Configure customer backlink integration
+     * @param {string} orderId - The order ID
+     * @param {string} backlinkUrl - The backlink URL
+     * @param {string} anchorText - The anchor text
+     * @param {Object} options - AI options { model?, provider? }
+     * @returns {Promise<Object>} Integration result
+     */
+    async configureCustomerBacklink(orderId, backlinkUrl, anchorText, options = {}) {
+        if (!orderId || !backlinkUrl || !anchorText) {
+            throw new Error('Order ID, backlink URL, and anchor text are required');
+        }
+
+        try {
+            // Get order details
+            const order = await prisma.order.findUnique({
+                where: { id: orderId },
+                include: { article: true }
+            });
+
+            if (!order) {
+                throw new Error('Order not found');
+            }
+
+            if (order.status !== 'PAID' && order.status !== 'PROCESSING') {
+                throw new Error('Order is not in valid state for backlink configuration');
+            }
+
+            // Integrate backlink using the BacklinkService with QC
+            const result = await this.backlinkService.integrateBacklink(
+                order.article_id,
+                backlinkUrl,
+                anchorText,
+                { 
+                    ...options,
+                    runQualityCheck: true, // Enable QC with regeneration
+                    maxQcRetries: 3 
+                }
+            );
+
+            // Update order status and link to the new version - skip QUALITY_CHECK, go to PROCESSING
+            await prisma.order.update({
+                where: { id: orderId },
+                data: {
+                    version_id: result.versionId,
+                    status: 'PROCESSING' // Stay in PROCESSING until submitted for review
+                }
+            });
+
+            console.log(`Customer backlink configured for order ${orderId}, created version ${result.versionId}`);
+
+            return {
+                versionId: result.versionId,
+                versionNum: result.versionNum,
+                content: result.content,
+                previewContent: result.previewContent
+            };
+
+        } catch (error) {
+            console.error(`Customer backlink configuration failed for order ${orderId}:`, error);
+            throw new Error(`Failed to configure backlink: ${error.message}`);
+        }
+    }
+
+    /**
+     * Regenerate customer backlink content
+     * @param {string} orderId - The order ID
+     * @param {string} versionId - The version ID to regenerate
+     * @param {string} backlinkUrl - The backlink URL
+     * @param {string} anchorText - The anchor text
+     * @param {Object} options - AI options { model?, provider? }
+     * @returns {Promise<Object>} Regeneration result
+     */
+    async regenerateCustomerBacklink(orderId, versionId, backlinkUrl, anchorText, options = {}) {
+        if (!orderId || !versionId || !backlinkUrl || !anchorText) {
+            throw new Error('Order ID, version ID, backlink URL, and anchor text are required');
+        }
+
+        try {
+            // Get order and validate
+            const order = await prisma.order.findUnique({
+                where: { id: orderId },
+                include: { article: true }
+            });
+
+            if (!order) {
+                throw new Error('Order not found');
+            }
+
+            if (order.version_id !== versionId) {
+                throw new Error('Version ID does not match order');
+            }
+
+            // Get the version to regenerate from
+            const existingVersion = await prisma.articleVersion.findUnique({
+                where: { id: versionId }
+            });
+
+            if (!existingVersion) {
+                throw new Error('Version not found');
+            }
+
+            // Re-integrate backlink with new content and QC
+            const result = await this.backlinkService.integrateBacklink(
+                order.article_id,
+                backlinkUrl,
+                anchorText,
+                { 
+                    ...options,
+                    runQualityCheck: true, // Enable QC with regeneration
+                    maxQcRetries: 3 
+                }
+            );
+
+            // Update order to point to new version
+            await prisma.order.update({
+                where: { id: orderId },
+                data: {
+                    version_id: result.versionId
+                }
+            });
+
+            console.log(`Customer backlink regenerated for order ${orderId}, created version ${result.versionId}`);
+
+            return {
+                versionId: result.versionId,
+                versionNum: result.versionNum,
+                content: result.content,
+                previewContent: result.previewContent
+            };
+
+        } catch (error) {
+            console.error(`Customer backlink regeneration failed for order ${orderId}:`, error);
+            throw new Error(`Failed to regenerate backlink: ${error.message}`);
+        }
+    }
+
+    /**
+     * Submit customer backlink for admin review
+     * @param {string} orderId - The order ID
+     * @param {string} versionId - The version ID to submit
+     * @returns {Promise<Object>} Submission result
+     */
+    async submitCustomerBacklinkForReview(orderId, versionId) {
+        if (!orderId || !versionId) {
+            throw new Error('Order ID and version ID are required');
+        }
+
+        try {
+            // Get order and validate
+            const order = await prisma.order.findUnique({
+                where: { id: orderId },
+                include: { 
+                    article: true,
+                    version: true
+                }
+            });
+
+            if (!order) {
+                throw new Error('Order not found');
+            }
+
+            if (order.version_id !== versionId) {
+                throw new Error('Version ID does not match order');
+            }
+
+            // Update order status to admin review
+            await prisma.order.update({
+                where: { id: orderId },
+                data: {
+                    status: 'ADMIN_REVIEW'
+                }
+            });
+
+            // Update the article version to indicate it's ready for review
+            await prisma.articleVersion.update({
+                where: { id: versionId },
+                data: {
+                    backlink_review_status: 'PENDING_REVIEW',
+                    last_qc_status: 'CUSTOMER_SUBMITTED',
+                    last_qc_notes: {
+                        message: 'Customer submitted backlink integration for admin review',
+                        type: 'customer_submission',
+                        timestamp: new Date().toISOString()
+                    }
+                }
+            });
+
+            // Send notification email to customer
+            try {
+                await this.emailService.sendOrderConfirmation(
+                    order.customer_email,
+                    {
+                        id: order.id,
+                        status: 'ADMIN_REVIEW',
+                        articleTitle: order.article.topic || order.article.slug,
+                        backlinkData: order.backlink_data
+                    }
+                );
+            } catch (emailError) {
+                console.warn('Failed to send review submission confirmation email:', emailError.message);
+            }
+
+            console.log(`Customer backlink submitted for review: order ${orderId}, version ${versionId}`);
+
+            return {
+                reviewId: versionId,
+                status: 'ADMIN_REVIEW',
+                message: 'Article submitted for admin review successfully'
+            };
+
+        } catch (error) {
+            console.error(`Customer backlink submission failed for order ${orderId}:`, error);
+            throw new Error(`Failed to submit for review: ${error.message}`);
+        }
+    }
+
+    // Private helper methods
+
+    /**
      * Calculate order progress
      * @private
      */
     _calculateOrderProgress(order) {
         const progressSteps = {
-            'PROCESSING': { step: 1, total: 4, description: 'Processing payment and initiating backlink integration' },
-            'QUALITY_CHECK': { step: 2, total: 4, description: 'Running quality checks on integrated content' },
-            'ADMIN_REVIEW': { step: 3, total: 4, description: 'Pending admin review and approval' },
-            'COMPLETED': { step: 4, total: 4, description: 'Article published with backlink' },
-            'FAILED': { step: 0, total: 4, description: 'Order processing failed' },
-            'REFUNDED': { step: 0, total: 4, description: 'Order refunded' }
+            'PROCESSING': { step: 1, total: 3, description: 'Processing payment and backlink integration' },
+            'ADMIN_REVIEW': { step: 2, total: 3, description: 'Pending admin review and approval' },
+            'COMPLETED': { step: 3, total: 3, description: 'Article published with backlink' },
+            'FAILED': { step: 0, total: 3, description: 'Order processing failed' },
+            'REFUNDED': { step: 0, total: 3, description: 'Order refunded' }
         };
 
         return progressSteps[order.status] || { step: 0, total: 4, description: 'Unknown status' };
@@ -475,9 +794,7 @@ class PurchaseService {
         // Estimate based on current status
         switch (order.status) {
             case 'PROCESSING':
-                return new Date(now.getTime() + 2 * 60 * 60 * 1000); // 2 hours
-            case 'QUALITY_CHECK':
-                return new Date(now.getTime() + 1 * 60 * 60 * 1000); // 1 hour
+                return new Date(now.getTime() + 1 * 60 * 60 * 1000); // 1 hour (includes QC)
             case 'ADMIN_REVIEW':
                 return new Date(now.getTime() + 24 * 60 * 60 * 1000); // 24 hours
             case 'COMPLETED':

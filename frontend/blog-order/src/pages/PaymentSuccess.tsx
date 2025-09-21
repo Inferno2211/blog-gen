@@ -1,23 +1,21 @@
-import { useEffect, useState } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
-import { CheckCircle, ArrowRight, Home } from 'lucide-react';
-import { completePurchase } from '../services/purchaseService';
-import LoadingSpinner from '../components/LoadingSpinner';
-import ErrorMessage from '../components/ErrorMessage';
+import { useEffect, useState } from "react";
+import { useSearchParams, useNavigate } from "react-router-dom";
+import { CheckCircle, Home } from "lucide-react";
+import { completePurchase } from "../services/purchaseService";
 
 export default function PaymentSuccess() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [orderCompleted, setOrderCompleted] = useState(false);
+  const [orderId, setOrderId] = useState<string | null>(null);
 
   useEffect(() => {
-    const sessionId = searchParams.get('session_id');
-    const stripeSessionId = searchParams.get('stripe_session_id');
-    
-    if (!sessionId || !stripeSessionId) {
-      setError('Invalid payment confirmation link');
+    const stripeSessionId = searchParams.get("stripe_session_id"); // This is the Stripe session ID
+    const sessionId = searchParams.get("session_id"); // This is our internal purchase session ID
+
+    if (!stripeSessionId || !sessionId) {
+      setError("Invalid payment confirmation link");
       setLoading(false);
       return;
     }
@@ -25,34 +23,55 @@ export default function PaymentSuccess() {
     handlePaymentCompletion(sessionId, stripeSessionId);
   }, [searchParams]);
 
-  const handlePaymentCompletion = async (sessionId: string, stripeSessionId: string) => {
+  const handlePaymentCompletion = async (
+    sessionId: string,
+    stripeSessionId: string
+  ) => {
     try {
       setLoading(true);
       setError(null);
-      
-      const result = await completePurchase(sessionId, stripeSessionId);
-      
-      if (result.orderId) {
-        setOrderCompleted(true);
+
+      const response = await completePurchase(sessionId, stripeSessionId);
+
+      if (response.success && response.data.orderId) {
+        setOrderId(response.data.orderId);
+        // Automatically redirect to backlink configuration after 3 seconds
+        setTimeout(() => {
+          const sessionId = searchParams.get("session_id");
+          navigate(
+            `/configure-backlink?session_id=${sessionId}&order_id=${response.data.orderId}`
+          );
+        }, 3000);
       } else {
-        setError('Failed to complete order');
+        setError("Failed to complete order");
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Payment completion failed');
+      setError(
+        err instanceof Error ? err.message : "Payment completion failed"
+      );
     } finally {
       setLoading(false);
     }
   };
 
+  const handleContinueToConfiguration = () => {
+    if (orderId) {
+      const sessionId = searchParams.get("session_id");
+      navigate(
+        `/configure-backlink?session_id=${sessionId}&order_id=${orderId}`
+      );
+    }
+  };
+
   const handleReturnHome = () => {
-    navigate('/');
+    navigate("/");
   };
 
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <LoadingSpinner />
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
           <p className="mt-4 text-gray-600">Completing your order...</p>
         </div>
       </div>
@@ -63,7 +82,9 @@ export default function PaymentSuccess() {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="max-w-md w-full">
-          <ErrorMessage message={error} />
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+            {error}
+          </div>
           <div className="text-center mt-6">
             <button
               onClick={handleReturnHome}
@@ -77,7 +98,7 @@ export default function PaymentSuccess() {
     );
   }
 
-  if (orderCompleted) {
+  if (orderId) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="max-w-2xl w-full mx-4">
@@ -92,65 +113,32 @@ export default function PaymentSuccess() {
               Payment Successful!
             </h1>
             <p className="text-gray-600 mb-8">
-              Thank you for your purchase. Your backlink order has been received and is now being processed.
+              Your payment has been processed successfully. You will now be
+              redirected to configure your backlink integration.
             </p>
 
-            {/* Process Steps */}
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-8">
-              <h2 className="text-lg font-semibold text-blue-900 mb-4">What happens next?</h2>
-              <div className="space-y-3 text-left">
-                <div className="flex items-start">
-                  <div className="w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-medium mr-3 mt-0.5">
-                    1
-                  </div>
-                  <div>
-                    <p className="text-blue-800 font-medium">Backlink Integration</p>
-                    <p className="text-blue-700 text-sm">We'll integrate your backlink into the article contextually</p>
-                  </div>
-                </div>
-                <div className="flex items-start">
-                  <div className="w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-medium mr-3 mt-0.5">
-                    2
-                  </div>
-                  <div>
-                    <p className="text-blue-800 font-medium">Quality Review</p>
-                    <p className="text-blue-700 text-sm">Our team will review the article for quality and compliance</p>
-                  </div>
-                </div>
-                <div className="flex items-start">
-                  <div className="w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-medium mr-3 mt-0.5">
-                    3
-                  </div>
-                  <div>
-                    <p className="text-blue-800 font-medium">Publication & Notification</p>
-                    <p className="text-blue-700 text-sm">Once approved, we'll publish the article and notify you via email</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Timeline */}
-            <div className="bg-gray-50 rounded-lg p-4 mb-8">
-              <p className="text-sm text-gray-600">
-                <strong>Estimated completion time:</strong> 1-3 business days
+            {/* Auto-redirect message */}
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-8">
+              <p className="text-blue-800 text-sm">
+                Redirecting to backlink configuration in a few seconds...
               </p>
             </div>
 
             {/* Action Buttons */}
             <div className="flex flex-col sm:flex-row gap-3 justify-center">
               <button
-                onClick={handleReturnHome}
-                className="inline-flex items-center px-6 py-3 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors"
+                onClick={handleContinueToConfiguration}
+                className="inline-flex items-center px-6 py-3 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700 transition-colors"
               >
-                <Home className="w-4 h-4 mr-2" />
-                Browse More Articles
+                <CheckCircle className="w-4 h-4 mr-2" />
+                Configure Backlink Now
               </button>
               <button
-                onClick={() => window.open('mailto:support@example.com', '_blank')}
+                onClick={handleReturnHome}
                 className="inline-flex items-center px-6 py-3 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
               >
-                Contact Support
-                <ArrowRight className="w-4 h-4 ml-2" />
+                <Home className="w-4 h-4 mr-2" />
+                Return to Homepage
               </button>
             </div>
           </div>

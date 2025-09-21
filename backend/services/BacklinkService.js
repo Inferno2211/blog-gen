@@ -59,12 +59,23 @@ class BacklinkService {
         }
 
         // Generate new content with integrated backlink
-        const newContent = await this.generateContentWithBacklink(
+        let newContent = await this.generateContentWithBacklink(
             originalContent, 
             backlinkUrl, 
             anchorText, 
             options
         );
+
+        // Run QC with regeneration if enabled
+        if (options.runQualityCheck) {
+            newContent = await this.applyQualityCheckWithRegeneration(
+                originalContent,
+                newContent,
+                backlinkUrl,
+                anchorText,
+                options
+            );
+        }
 
         // Create new article version
         const result = await this.createNewArticleVersion(articleId, newContent, backlinkUrl, anchorText, originalContent);
@@ -92,7 +103,7 @@ class BacklinkService {
         const model = options.model || 'gemini-2.5-flash';
         const provider = options.provider || 'gemini';
 
-        const prompt = this._buildBacklinkIntegrationPrompt(originalContent, backlinkUrl, anchorText);
+        const prompt = this._buildBacklinkIntegrationPrompt(originalContent, backlinkUrl, anchorText, options.qcFeedback);
 
         try {
             const response = await callAI(prompt, { provider, modelName: model });
@@ -173,8 +184,8 @@ class BacklinkService {
      * @param {string} anchorText - The anchor text to use
      * @returns {string} - The formatted prompt
      */
-    _buildBacklinkIntegrationPrompt(originalContent, backlinkUrl, anchorText) {
-        return `You are an expert content editor. Your task is to naturally integrate a backlink into the existing article content while maintaining the article's quality, flow, and readability.
+    _buildBacklinkIntegrationPrompt(originalContent, backlinkUrl, anchorText, qcFeedback = null) {
+        let prompt = `You are an expert content editor. Your task is to naturally integrate a backlink into the existing article content while maintaining the article's quality, flow, and readability.
 
 ORIGINAL ARTICLE CONTENT:
 ${originalContent}
@@ -198,9 +209,23 @@ REQUIREMENTS:
 - Maintain the article's original style and voice
 - The backlink must appear exactly once in the content
 - Use markdown link format: [${anchorText}](${backlinkUrl})
-- Ensure the surrounding text makes the link contextually appropriate
+- Ensure the surrounding text makes the link contextually appropriate`;
+
+        // Add QC feedback if provided
+        if (qcFeedback) {
+            prompt += `
+
+QUALITY CHECK FEEDBACK TO ADDRESS:
+${qcFeedback}
+
+Please address the above feedback while regenerating the content with the backlink integration.`;
+        }
+
+        prompt += `
 
 Return the complete article with the backlink naturally integrated. Do not add any explanations or comments outside the article content.`;
+
+        return prompt;
     }
 
     /**
@@ -238,6 +263,88 @@ Return the complete article with the backlink naturally integrated. Do not add a
             // Fallback: return first 500 characters of entire content
             return content.length <= 500 ? content : content.substring(0, 500) + '...';
         }
+    }
+
+    /**
+     * Apply quality check with regeneration using feedback
+     * @param {string} originalContent - The original article content
+     * @param {string} generatedContent - The initially generated content
+     * @param {string} backlinkUrl - The backlink URL
+     * @param {string} anchorText - The anchor text
+     * @param {Object} options - { model?, provider?, maxQcRetries? }
+     * @returns {Promise<string>} - The final quality-checked content
+     */
+    async applyQualityCheckWithRegeneration(originalContent, generatedContent, backlinkUrl, anchorText, options = {}) {
+        const { runQC } = require('./articles/aiService');
+        const model = options.model || 'gemini-2.5-flash';
+        const provider = options.provider || 'gemini';
+        const maxRetries = options.maxQcRetries || 3;
+        
+        let currentContent = generatedContent;
+        let attempt = 1;
+
+        while (attempt <= maxRetries) {
+            console.log(`QC attempt ${attempt}/${maxRetries} for backlink integration`);
+
+            try {
+                // Run quality check
+                const qcResult = await runQC(currentContent, {
+                    backlinkUrl,
+                    anchorText,
+                    model,
+                    provider,
+                    noExternalBacklinks: false
+                });
+
+                console.log(`QC Result for attempt ${attempt}:`, qcResult);
+
+                // Check if QC passed
+                if (qcResult && qcResult.status === 'pass') {
+                    console.log(`QC passed on attempt ${attempt}`);
+                    return currentContent;
+                }
+
+                // If QC failed and we have feedback, regenerate
+                if (qcResult && attempt < maxRetries) {
+                    // Try different feedback fields that might be available
+                    const feedback = qcResult.feedback || 
+                                   qcResult.issues || 
+                                   qcResult.suggestions || 
+                                   (qcResult.errors && qcResult.errors.join('. ')) ||
+                                   'Please improve the content quality and backlink integration.';
+                    
+                    console.log(`QC failed on attempt ${attempt}, regenerating with feedback:`, feedback);
+                    
+                    // Regenerate with QC feedback using original content as base
+                    currentContent = await this.generateContentWithBacklink(
+                        originalContent, 
+                        backlinkUrl, 
+                        anchorText, 
+                        { 
+                            ...options,
+                            qcFeedback: feedback 
+                        }
+                    );
+                    
+                    attempt++;
+                } else {
+                    // No feedback or max retries reached
+                    console.log(`QC failed on attempt ${attempt}, no actionable feedback available or max retries reached`);
+                    console.log('Final QC Result:', JSON.stringify(qcResult, null, 2));
+                    break;
+                }
+            } catch (error) {
+                console.error(`QC error on attempt ${attempt}:`, error);
+                if (attempt === maxRetries) {
+                    // If last attempt failed, return the current content
+                    console.log('Max QC retries reached, returning current content');
+                    break;
+                }
+                attempt++;
+            }
+        }
+
+        return currentContent;
     }
 
     /**

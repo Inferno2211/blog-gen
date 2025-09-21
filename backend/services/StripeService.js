@@ -49,7 +49,7 @@ class StripeService {
           },
         ],
         mode: 'payment',
-        success_url: `${process.env.FRONTEND_URL}/purchase/success?session_id={CHECKOUT_SESSION_ID}&purchase_session=${sessionId}`,
+        success_url: `${process.env.FRONTEND_URL}/payment/success?stripe_session_id={CHECKOUT_SESSION_ID}&session_id=${sessionId}`,
         cancel_url: `${process.env.FRONTEND_URL}/purchase/cancel?session_id=${sessionId}`,
         customer_email: email,
         metadata: {

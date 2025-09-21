@@ -1,8 +1,6 @@
-import { useEffect, useState } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
-import { verifySession } from '../services/purchaseService';
-import LoadingSpinner from '../components/LoadingSpinner';
-import ErrorMessage from '../components/ErrorMessage';
+import { useEffect, useState } from "react";
+import { useSearchParams, useNavigate } from "react-router-dom";
+import { verifySession } from "../services/purchaseService";
 
 export default function VerifySession() {
   const [searchParams] = useSearchParams();
@@ -11,9 +9,9 @@ export default function VerifySession() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const token = searchParams.get('token');
+    const token = searchParams.get("token");
     if (!token) {
-      setError('Invalid verification link');
+      setError("Invalid verification link");
       setLoading(false);
       return;
     }
@@ -25,31 +23,44 @@ export default function VerifySession() {
     try {
       setLoading(true);
       setError(null);
-      
+
       const result = await verifySession(token);
-      
-      if (result.valid && result.stripeCheckoutUrl) {
-        // Redirect to Stripe checkout
-        window.location.href = result.stripeCheckoutUrl;
+
+      if (result.valid && result.sessionData) {
+        // Check if this session already has payment completed
+        // If so, redirect to backlink configuration
+        if (result.sessionData.status === "PAID") {
+          // Session is already paid, redirect to backlink configuration
+          navigate(
+            `/configure-backlink?session_id=${
+              result.sessionData.sessionId
+            }&order_id=${result.sessionData.orderId || "pending"}`
+          );
+        } else if (result.stripeCheckoutUrl) {
+          // Session is pending payment, redirect to Stripe checkout
+          window.location.href = result.stripeCheckoutUrl;
+        } else {
+          setError("Unable to process verification link");
+        }
       } else {
-        setError('Invalid or expired verification link');
+        setError(result.error || "Invalid or expired verification link");
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Verification failed');
+      setError(err instanceof Error ? err.message : "Verification failed");
     } finally {
       setLoading(false);
     }
   };
 
   const handleReturnHome = () => {
-    navigate('/');
+    navigate("/");
   };
 
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <LoadingSpinner />
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
           <p className="mt-4 text-gray-600">Verifying your session...</p>
         </div>
       </div>
@@ -60,7 +71,9 @@ export default function VerifySession() {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="max-w-md w-full">
-          <ErrorMessage message={error} />
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+            {error}
+          </div>
           <div className="text-center mt-6">
             <button
               onClick={handleReturnHome}

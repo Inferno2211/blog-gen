@@ -3,7 +3,7 @@ export interface PublicArticle {
   slug: string;
   title: string;
   preview: string;
-  availability_status: 'AVAILABLE' | 'SOLD_OUT' | 'PROCESSING';
+  availability_status: "AVAILABLE" | "SOLD_OUT" | "PROCESSING";
   domain: string;
   created_at: string;
 }
@@ -25,7 +25,14 @@ export interface PurchaseSession {
     target_url: string;
     notes?: string;
   };
-  status: 'PENDING_AUTH' | 'AUTHENTICATED' | 'PAYMENT_PENDING' | 'PAID' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
+  status:
+    | "PENDING_AUTH"
+    | "AUTHENTICATED"
+    | "PAYMENT_PENDING"
+    | "PAID"
+    | "PROCESSING"
+    | "COMPLETED"
+    | "FAILED";
   stripe_session_id?: string;
   magic_link_token: string;
   magic_link_expires: string;
@@ -50,7 +57,13 @@ export interface Order {
     currency: string;
     status: string;
   };
-  status: 'PROCESSING' | 'QUALITY_CHECK' | 'ADMIN_REVIEW' | 'COMPLETED' | 'FAILED' | 'REFUNDED';
+  status:
+    | "PROCESSING"
+    | "QUALITY_CHECK"
+    | "ADMIN_REVIEW"
+    | "COMPLETED"
+    | "FAILED"
+    | "REFUNDED";
   created_at: string;
   completed_at?: string;
 }
@@ -67,13 +80,21 @@ export interface PurchaseInitiateResponse {
 
 export interface SessionVerifyResponse {
   valid: boolean;
-  sessionData?: PurchaseSession;
+  sessionData?: PurchaseSession & {
+    sessionId?: string;
+    orderId?: string;
+  };
   stripeCheckoutUrl?: string;
+  error?: string;
 }
 
 export interface PurchaseCompleteResponse {
-  orderId: string;
-  status: string;
+  success: boolean;
+  message: string;
+  data: {
+    orderId: string;
+    status: string;
+  };
 }
 
 export interface OrderStatusResponse {

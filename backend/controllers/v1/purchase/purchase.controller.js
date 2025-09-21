@@ -187,12 +187,13 @@ class PurchaseController {
             try {
                 const orderStatus = await this.purchaseService.getOrderStatus(result.orderId);
                 await this.emailService.sendOrderConfirmation(
-                    orderStatus.orderDetails.customerEmail || 'customer@example.com',
+                    orderStatus.orderDetails.customerEmail,
                     {
-                        orderId: result.orderId,
+                        id: result.orderId,
                         articleTitle: orderStatus.orderDetails.articleTitle,
-                        backlinkData: orderStatus.orderDetails.backlinkData,
-                        status: result.status
+                        backlink_data: orderStatus.orderDetails.backlinkData, // Convert camelCase to snake_case
+                        status: result.status,
+                        created_at: orderStatus.orderDetails.createdAt
                     }
                 );
             } catch (emailError) {
@@ -317,6 +318,165 @@ class PurchaseController {
             next(error);
         }
     }
+
+    /**
+     * GET /api/v1/purchase/order/:orderId
+     * Get order details for customer backlink configuration
+     */
+    async getOrderDetails(req, res, next) {
+        try {
+            const { orderId } = req.params;
+
+            if (!orderId) {
+                throw new ValidationError('Order ID is required');
+            }
+
+            // Get order details from the service
+            const orderDetails = await this.purchaseService.getOrderDetails(orderId);
+
+            res.status(200).json({
+                success: true,
+                message: 'Order details retrieved successfully',
+                order: orderDetails
+            });
+
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    /**
+     * POST /api/v1/purchase/configure-backlink
+     * Configure backlink for a customer order
+     */
+    async configureBacklink(req, res, next) {
+        try {
+            const { orderId, backlinkUrl, anchorText, model, provider } = req.body;
+
+            // Validate required fields
+            if (!orderId) {
+                throw new ValidationError('Order ID is required');
+            }
+            if (!backlinkUrl) {
+                throw new ValidationError('Backlink URL is required');
+            }
+            if (!anchorText) {
+                throw new ValidationError('Anchor text is required');
+            }
+
+            // Validate URL format
+            try {
+                new URL(backlinkUrl);
+            } catch {
+                throw new ValidationError('Invalid backlink URL format');
+            }
+
+            // Process backlink configuration
+            const result = await this.purchaseService.configureCustomerBacklink(
+                orderId,
+                backlinkUrl,
+                anchorText,
+                { model: model || 'gemini-2.5-flash', provider: provider || 'gemini' }
+            );
+
+            res.status(200).json({
+                success: true,
+                message: 'Backlink configured successfully',
+                versionId: result.versionId,
+                versionNum: result.versionNum,
+                content: result.content,
+                previewContent: result.previewContent
+            });
+
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    /**
+     * POST /api/v1/purchase/regenerate-backlink
+     * Regenerate backlink content for a customer order
+     */
+    async regenerateBacklink(req, res, next) {
+        try {
+            const { orderId, versionId, backlinkUrl, anchorText, model, provider } = req.body;
+
+            // Validate required fields
+            if (!orderId) {
+                throw new ValidationError('Order ID is required');
+            }
+            if (!versionId) {
+                throw new ValidationError('Version ID is required');
+            }
+            if (!backlinkUrl) {
+                throw new ValidationError('Backlink URL is required');
+            }
+            if (!anchorText) {
+                throw new ValidationError('Anchor text is required');
+            }
+
+            // Validate URL format
+            try {
+                new URL(backlinkUrl);
+            } catch {
+                throw new ValidationError('Invalid backlink URL format');
+            }
+
+            // Regenerate backlink content
+            const result = await this.purchaseService.regenerateCustomerBacklink(
+                orderId,
+                versionId,
+                backlinkUrl,
+                anchorText,
+                { model: model || 'gemini-2.5-flash', provider: provider || 'gemini' }
+            );
+
+            res.status(200).json({
+                success: true,
+                message: 'Backlink content regenerated successfully',
+                versionId: result.versionId,
+                versionNum: result.versionNum,
+                content: result.content,
+                previewContent: result.previewContent
+            });
+
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    /**
+     * POST /api/v1/purchase/submit-for-review
+     * Submit customer backlink for admin review
+     */
+    async submitForReview(req, res, next) {
+        try {
+            const { orderId, versionId } = req.body;
+
+            // Validate required fields
+            if (!orderId) {
+                throw new ValidationError('Order ID is required');
+            }
+            if (!versionId) {
+                throw new ValidationError('Version ID is required');
+            }
+
+            // Submit for review
+            const result = await this.purchaseService.submitCustomerBacklinkForReview(
+                orderId,
+                versionId
+            );
+
+            res.status(200).json({
+                success: true,
+                message: 'Article submitted for admin review successfully',
+                reviewId: result.reviewId
+            });
+
+        } catch (error) {
+            next(error);
+        }
+    }
 }
 
 // Export controller methods directly
@@ -349,5 +509,25 @@ module.exports = {
     async getPaymentStatus(req, res, next) {
         const controller = new PurchaseController();
         return controller.getPaymentStatus(req, res, next);
+    },
+
+    async getOrderDetails(req, res, next) {
+        const controller = new PurchaseController();
+        return controller.getOrderDetails(req, res, next);
+    },
+
+    async configureBacklink(req, res, next) {
+        const controller = new PurchaseController();
+        return controller.configureBacklink(req, res, next);
+    },
+
+    async regenerateBacklink(req, res, next) {
+        const controller = new PurchaseController();
+        return controller.regenerateBacklink(req, res, next);
+    },
+
+    async submitForReview(req, res, next) {
+        const controller = new PurchaseController();
+        return controller.submitForReview(req, res, next);
     }
 };

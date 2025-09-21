@@ -83,6 +83,16 @@ class SessionService {
                             status: true,
                             availability_status: true
                         }
+                    },
+                    orders: {
+                        select: {
+                            id: true,
+                            status: true
+                        },
+                        orderBy: {
+                            created_at: 'desc'
+                        },
+                        take: 1
                     }
                 }
             });
@@ -98,16 +108,25 @@ class SessionService {
             }
 
             // Check if session is in correct state for verification
-            if (session.status !== 'PENDING_AUTH') {
-                return { valid: false, error: 'Session is not in valid state for authentication' };
+            // Allow both PENDING_AUTH and PAID status for flexibility
+            if (session.status !== 'PENDING_AUTH' && session.status !== 'PAID') {
+                return { 
+                    valid: false, 
+                    error: `Session is not in valid state for authentication. Current status: ${session.status}`,
+                    currentStatus: session.status
+                };
             }
 
-            // Verify article is still available
-            if (session.article.availability_status !== 'PROCESSING') {
+            // Verify article availability based on session status
+            // If session is PAID, we don't need to check article availability
+            if (session.status === 'PENDING_AUTH' && session.article.availability_status !== 'PROCESSING') {
                 return { valid: false, error: 'Article is no longer available for purchase' };
             }
 
             console.log(`Magic link verified - Session: ${session.id}, Email: ${session.email}`);
+
+            // Get order ID if session is paid
+            const orderId = session.orders && session.orders.length > 0 ? session.orders[0].id : null;
 
             return {
                 valid: true,
@@ -117,7 +136,9 @@ class SessionService {
                     articleId: session.article_id,
                     backlinkData: session.backlink_data,
                     articleTitle: session.article.slug,
-                    expiresAt: session.magic_link_expires
+                    expiresAt: session.magic_link_expires,
+                    status: session.status,
+                    orderId: orderId
                 }
             };
         } catch (error) {

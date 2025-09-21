@@ -94,7 +94,7 @@ async function approveBacklink(versionId, adminId, reviewNotes) {
 
     // Send customer notifications for any associated orders
     try {
-        const EmailService = require('../../EmailService');
+        const EmailService = require('../EmailService');
         const emailService = new EmailService();
         
         for (const order of version.orders) {
@@ -141,7 +141,7 @@ async function rejectBacklink(versionId, adminId, reviewNotes) {
 
     // Process refunds and notifications for any associated orders
     try {
-        const EmailService = require('../../EmailService');
+        const EmailService = require('../EmailService');
         const emailService = new EmailService();
         
         for (const order of version.orders) {
@@ -239,7 +239,7 @@ async function approveAndPublish(versionId, adminId, reviewNotes) {
             
             // Complete orders and send customer notifications
             try {
-                const EmailService = require('../../EmailService');
+                const EmailService = require('../EmailService');
                 const emailService = new EmailService();
                 
                 for (const order of approvedVersion.orders) {

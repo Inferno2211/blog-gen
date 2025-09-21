@@ -93,7 +93,7 @@ describe('EmailService', () => {
       expect(emailCall.html).toContain('Test Article');
       expect(emailCall.html).toContain('test keyword');
       expect(emailCall.html).toContain('https://example.com');
-      expect(emailCall.html).toContain(`/auth/verify?token=${testToken}`);
+      expect(emailCall.html).toContain(`/verify?token=${testToken}`);
     });
 
     it('should retry on failure and eventually succeed', async () => {
