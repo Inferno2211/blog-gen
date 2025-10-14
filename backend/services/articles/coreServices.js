@@ -220,6 +220,21 @@ async function performQC(articleId, content, maxRetries = 3, options = {}) {
                 prompt: meta.userPrompt || ''
             };
 
+            // Add backlink metadata if we have backlink information
+            if (!options.noExternalBacklinks && (backlinkUrl || anchorText)) {
+                versionData.backlink_metadata = {
+                    backlink_url: backlinkUrl || '',
+                    anchor_text: anchorText || '',
+                    original_content_hash: require('crypto').createHash('md5').update(contentWithImages).digest('hex'),
+                    integration_date: new Date().toISOString()
+                };
+                
+                // Set backlink review status for customer orders
+                if (meta.userPrompt || options.isCustomerGenerated) {
+                    versionData.backlink_review_status = 'PENDING_REVIEW';
+                }
+            }
+
             // Save immediately on pass
             const saved = await prisma.articleVersion.create({ data: versionData });
             finalVersionId = saved.id;
@@ -477,7 +492,8 @@ async function createVersionForArticle(articleId, genParams, maxRetries = 3) {
         provider,
         userPrompt,
         noExternalBacklinks: !!noExternalBacklinks,
-        internalLinkCandidates
+        internalLinkCandidates,
+        isCustomerGenerated: true // Flag this as customer-generated content
     });
     return qcResult;
 }
