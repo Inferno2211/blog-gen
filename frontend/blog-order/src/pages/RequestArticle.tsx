@@ -1,9 +1,12 @@
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { getBrowseDomains, initiateArticlePurchase } from '../services/purchaseService';
-import type { Domain } from '../types/domain';
-import LoadingSpinner from '../components/LoadingSpinner';
-import ErrorMessage from '../components/ErrorMessage';
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import {
+  getBrowseDomains,
+  initiateArticlePurchase,
+} from "../services/purchaseService";
+import type { Domain } from "../types/domain";
+import LoadingSpinner from "../components/LoadingSpinner";
+import ErrorMessage from "../components/ErrorMessage";
 
 interface ArticleRequestForm {
   domainId: string;
@@ -22,15 +25,15 @@ export default function RequestArticle() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedDomain, setSelectedDomain] = useState<Domain | null>(null);
-  
+
   const [formData, setFormData] = useState<ArticleRequestForm>({
-    domainId: '',
-    articleTitle: '',
-    topic: '',
-    niche: '',
-    keyword: '',
-    email: '',
-    notes: ''
+    domainId: "",
+    articleTitle: "",
+    topic: "",
+    niche: "",
+    keyword: "",
+    email: "",
+    notes: "",
   });
 
   useEffect(() => {
@@ -44,7 +47,7 @@ export default function RequestArticle() {
       const data = await getBrowseDomains();
       setDomains(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load domains');
+      setError(err instanceof Error ? err.message : "Failed to load domains");
     } finally {
       setLoading(false);
     }
@@ -52,18 +55,20 @@ export default function RequestArticle() {
 
   const handleDomainSelect = (domain: Domain) => {
     setSelectedDomain(domain);
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
       domainId: domain.id,
-      niche: domain.tags || prev.niche // Pre-fill niche from domain tags
+      niche: domain.tags || prev.niche, // Pre-fill niche from domain tags
     }));
   };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  const handleInputChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+  ) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
-      [name]: value
+      [name]: value,
     }));
   };
 
@@ -80,17 +85,19 @@ export default function RequestArticle() {
         niche: formData.niche,
         keyword: formData.keyword,
         email: formData.email,
-        notes: formData.notes
+        notes: formData.notes,
       });
 
       // Redirect to payment page
       if (response.paymentUrl) {
         window.location.href = response.paymentUrl;
       } else {
-        throw new Error('Payment URL not received');
+        throw new Error("Payment URL not received");
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to initiate purchase');
+      setError(
+        err instanceof Error ? err.message : "Failed to initiate purchase"
+      );
     } finally {
       setSubmitting(false);
     }
@@ -123,15 +130,26 @@ export default function RequestArticle() {
                 Request Custom Article
               </h1>
               <p className="text-gray-600 mt-2">
-                Commission an AI-generated article for one of our premium domains
+                Commission an AI-generated article for one of our premium
+                domains
               </p>
             </div>
             <button
-              onClick={() => navigate('/')}
+              onClick={() => navigate("/")}
               className="text-gray-500 hover:text-gray-700"
             >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              <svg
+                className="w-6 h-6"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M6 18L18 6M6 6l12 12"
+                />
               </svg>
             </button>
           </div>
@@ -146,7 +164,8 @@ export default function RequestArticle() {
               Custom Article Generation - $25
             </h2>
             <p className="text-green-800">
-              Get a high-quality, AI-generated article published on your chosen domain
+              Get a high-quality, AI-generated article published on your chosen
+              domain
             </p>
           </div>
         </div>
@@ -166,7 +185,7 @@ export default function RequestArticle() {
             <p className="text-gray-600 mb-6">
               Select the domain where you'd like your article to be published:
             </p>
-            
+
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {domains.map((domain) => (
                 <button
@@ -174,7 +193,9 @@ export default function RequestArticle() {
                   onClick={() => handleDomainSelect(domain)}
                   className="p-4 border border-gray-200 rounded-lg hover:border-green-500 hover:bg-green-50 transition-colors text-left"
                 >
-                  <h3 className="font-semibold text-gray-900 mb-2">{domain.name}</h3>
+                  <h3 className="font-semibold text-gray-900 mb-2">
+                    {domain.name}
+                  </h3>
                   <p className="text-sm text-gray-600 mb-2">{domain.slug}</p>
                   {domain.tags && (
                     <p className="text-xs text-green-600 bg-green-100 rounded px-2 py-1 inline-block">
@@ -187,7 +208,9 @@ export default function RequestArticle() {
 
             {domains.length === 0 && (
               <div className="text-center py-8">
-                <p className="text-gray-500">No domains available at the moment.</p>
+                <p className="text-gray-500">
+                  No domains available at the moment.
+                </p>
                 <button
                   onClick={loadDomains}
                   className="mt-4 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
@@ -199,23 +222,34 @@ export default function RequestArticle() {
           </div>
         ) : (
           /* Article Configuration Form */
-          <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow-sm border p-6">
+          <form
+            onSubmit={handleSubmit}
+            className="bg-white rounded-lg shadow-sm border p-6"
+          >
             <h2 className="text-xl font-semibold text-gray-900 mb-4">
               Step 2: Configure Your Article
             </h2>
-            
+
             {/* Selected Domain Info */}
             <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="font-semibold text-green-900">Selected Domain</h3>
-                  <p className="text-green-800">{selectedDomain.name} ({selectedDomain.slug})</p>
+                  <h3 className="font-semibold text-green-900">
+                    Selected Domain
+                  </h3>
+                  <p className="text-green-800">
+                    {selectedDomain.name} ({selectedDomain.slug})
+                  </p>
                 </div>
                 <button
                   type="button"
                   onClick={() => {
                     setSelectedDomain(null);
-                    setFormData(prev => ({ ...prev, domainId: '', niche: '' }));
+                    setFormData((prev) => ({
+                      ...prev,
+                      domainId: "",
+                      niche: "",
+                    }));
                   }}
                   className="text-green-600 hover:text-green-800 text-sm"
                 >
@@ -319,11 +353,11 @@ export default function RequestArticle() {
                 disabled={submitting}
                 className="flex-1 bg-green-600 text-white py-3 px-6 rounded-md hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed font-medium"
               >
-                {submitting ? 'Processing...' : 'Proceed to Payment ($25)'}
+                {submitting ? "Processing..." : "Proceed to Payment ($25)"}
               </button>
               <button
                 type="button"
-                onClick={() => navigate('/')}
+                onClick={() => navigate("/")}
                 className="flex-1 sm:flex-none bg-gray-200 text-gray-800 py-3 px-6 rounded-md hover:bg-gray-300"
               >
                 Cancel

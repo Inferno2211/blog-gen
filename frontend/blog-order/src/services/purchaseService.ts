@@ -120,7 +120,7 @@ export async function verifySession(
     alreadyPaid: data.data?.alreadyPaid,
     orderId: data.data?.orderId,
     orderType: data.data?.orderType,
-    error: data.message
+    error: data.message,
   };
 }
 
@@ -215,100 +215,98 @@ export async function initiateArticlePurchase(request: {
   notes?: string;
 }): Promise<PurchaseInitiateResponse> {
   const res = await fetch(`${API_BASE}/purchase/initiate-article`, {
-    method: 'POST',
+    method: "POST",
     headers: {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
     },
     body: JSON.stringify({
       ...request,
-      type: 'ARTICLE_GENERATION' // Distinguish from backlink orders
+      type: "ARTICLE_GENERATION", // Distinguish from backlink orders
     }),
   });
 
   if (!res.ok) {
     const errorData = await res.json();
-    throw new Error(errorData.message || 'Failed to initiate article purchase');
+    throw new Error(errorData.message || "Failed to initiate article purchase");
   }
 
   return res.json();
 }
 
 // Get order details for customer configuration
-export async function getOrderDetails(orderId: string): Promise<{ order: any }> {
+export async function getOrderDetails(
+  orderId: string
+): Promise<{ order: any }> {
   const res = await fetch(`${API_BASE}/purchase/order/${orderId}`);
   if (!res.ok) {
     const errorData = await res.json();
-    throw new Error(errorData.message || 'Failed to get order details');
+    throw new Error(errorData.message || "Failed to get order details");
   }
   return res.json();
 }
 
 // Customer article generation
-export async function customerConfigureArticle(
-  articleData: {
-    orderId: string;
-    title: string;
-    niche?: string;
-    keyword?: string;
-    topic: string;
-    targetURL?: string;
-    anchorText?: string;
-    model?: string;
-    provider?: string;
-  }
-): Promise<{
+export async function customerConfigureArticle(articleData: {
+  orderId: string;
+  title: string;
+  niche?: string;
+  keyword?: string;
+  topic: string;
+  targetURL?: string;
+  anchorText?: string;
+  model?: string;
+  provider?: string;
+}): Promise<{
   versionId: string;
   versionNum: number;
   content: string;
   previewContent: string;
 }> {
   const res = await fetch(`${API_BASE}/purchase/configure-article`, {
-    method: 'POST',
+    method: "POST",
     headers: {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
     },
     body: JSON.stringify(articleData),
   });
 
   if (!res.ok) {
     const errorData = await res.json();
-    throw new Error(errorData.message || 'Failed to generate article');
+    throw new Error(errorData.message || "Failed to generate article");
   }
 
   return res.json();
 }
 
 // Regenerate customer article
-export async function customerRegenerateArticle(
-  data: {
-    orderId: string;
-    versionId: string;
-    title: string;
-    niche?: string;
-    keyword?: string;
-    topic: string;
-    targetURL?: string;
-    anchorText?: string;
-    model?: string;
-    provider?: string;
-  }
-): Promise<{
+export async function customerRegenerateArticle(data: {
+  orderId: string;
+  versionId: string;
+  title: string;
+  niche?: string;
+  keyword?: string;
+  topic: string;
+  targetURL?: string;
+  anchorText?: string;
+  model?: string;
+  provider?: string;
+}): Promise<{
   versionId: string;
   versionNum: number;
   content: string;
   previewContent: string;
 }> {
   const res = await fetch(`${API_BASE}/purchase/regenerate-article`, {
-    method: 'POST',
+    method: "POST",
     headers: {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
     },
     body: JSON.stringify(data),
   });
 
   if (!res.ok) {
     const errorData = await res.json();
-    throw new Error(errorData.message || 'Failed to regenerate article');
+    throw new Error(errorData.message || "Failed to regenerate article");
   }
 
   return res.json();
@@ -320,31 +318,29 @@ export async function customerSubmitArticleForReview(data: {
   versionId: string;
 }): Promise<{ reviewId: string }> {
   const res = await fetch(`${API_BASE}/purchase/submit-for-review`, {
-    method: 'POST',
+    method: "POST",
     headers: {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
     },
     body: JSON.stringify(data),
   });
 
   if (!res.ok) {
     const errorData = await res.json();
-    throw new Error(errorData.message || 'Failed to submit for review');
+    throw new Error(errorData.message || "Failed to submit for review");
   }
 
   return res.json();
 }
 
 // Customer backlink integration (compatible with existing CustomerBacklinkConfiguration)
-export async function customerIntegrateBacklink(
-  backlinkData: {
-    orderId: string;
-    backlinkUrl: string;
-    anchorText: string;
-    model?: string;
-    provider?: string;
-  }
-): Promise<{
+export async function customerIntegrateBacklink(backlinkData: {
+  orderId: string;
+  backlinkUrl: string;
+  anchorText: string;
+  model?: string;
+  provider?: string;
+}): Promise<{
   success: boolean;
   message: string;
   versionId: string;
@@ -353,32 +349,30 @@ export async function customerIntegrateBacklink(
   previewContent: string;
 }> {
   const res = await fetch(`${API_BASE}/purchase/configure-backlink`, {
-    method: 'POST',
+    method: "POST",
     headers: {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
     },
     body: JSON.stringify(backlinkData),
   });
 
   if (!res.ok) {
     const errorData = await res.json();
-    throw new Error(errorData.message || 'Failed to integrate backlink');
+    throw new Error(errorData.message || "Failed to integrate backlink");
   }
 
   return res.json();
 }
 
 // Regenerate customer backlink content
-export async function customerRegenerateBacklink(
-  data: {
-    orderId: string;
-    versionId: string;
-    backlinkUrl: string;
-    anchorText: string;
-    model?: string;
-    provider?: string;
-  }
-): Promise<{
+export async function customerRegenerateBacklink(data: {
+  orderId: string;
+  versionId: string;
+  backlinkUrl: string;
+  anchorText: string;
+  model?: string;
+  provider?: string;
+}): Promise<{
   success: boolean;
   message: string;
   versionId: string;
@@ -387,16 +381,16 @@ export async function customerRegenerateBacklink(
   previewContent: string;
 }> {
   const res = await fetch(`${API_BASE}/purchase/regenerate-backlink`, {
-    method: 'POST',
+    method: "POST",
     headers: {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
     },
     body: JSON.stringify(data),
   });
 
   if (!res.ok) {
     const errorData = await res.json();
-    throw new Error(errorData.message || 'Failed to regenerate content');
+    throw new Error(errorData.message || "Failed to regenerate content");
   }
 
   return res.json();
@@ -408,16 +402,16 @@ export async function customerSubmitForReview(data: {
   versionId: string;
 }): Promise<{ success: boolean; message: string }> {
   const res = await fetch(`${API_BASE}/purchase/submit-for-review`, {
-    method: 'POST',
+    method: "POST",
     headers: {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
     },
     body: JSON.stringify(data),
   });
 
   if (!res.ok) {
     const errorData = await res.json();
-    throw new Error(errorData.message || 'Failed to submit for review');
+    throw new Error(errorData.message || "Failed to submit for review");
   }
 
   return res.json();

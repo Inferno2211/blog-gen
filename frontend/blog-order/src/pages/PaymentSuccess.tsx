@@ -39,23 +39,30 @@ export default function PaymentSuccess() {
         setTimeout(async () => {
           try {
             const orderData = await getOrderDetails(response.data.orderId);
-            console.log('Order data for redirect:', orderData); // Debug log
-            const isArticleGeneration = orderData.order?.backlinkData?.type === 'ARTICLE_GENERATION';
-            console.log('Is article generation?', isArticleGeneration, orderData.order?.backlinkData); // Debug log
-            
+            console.log("Order data for redirect:", orderData); // Debug log
+            const isArticleGeneration =
+              orderData.order?.backlinkData?.type === "ARTICLE_GENERATION";
+            console.log(
+              "Is article generation?",
+              isArticleGeneration,
+              orderData.order?.backlinkData
+            ); // Debug log
+
             if (isArticleGeneration) {
-              console.log('Redirecting to article configuration'); // Debug log
+              console.log("Redirecting to article configuration"); // Debug log
               navigate(`/configure-article?order_id=${response.data.orderId}`);
             } else {
-              console.log('Redirecting to backlink configuration'); // Debug log
+              console.log("Redirecting to backlink configuration"); // Debug log
               const sessionId = searchParams.get("session_id");
-              navigate(`/configure-backlink?session_id=${sessionId}&order_id=${response.data.orderId}`);
+              navigate(
+                `/configure-backlink?session_id=${sessionId}&order_id=${response.data.orderId}`
+              );
             }
           } catch (error) {
-            console.error('Failed to get order type for redirect:', error);
-            console.error('Error details:', error.message, error.stack);
+            console.error("Failed to get order type for redirect:", error);
+            console.error("Error details:", error.message, error.stack);
             // Better fallback - try to determine from URL or default to home
-            console.log('Falling back to home page due to error');
+            console.log("Falling back to home page due to error");
             navigate("/");
           }
         }, 3000);
@@ -74,22 +81,28 @@ export default function PaymentSuccess() {
   const handleContinueToConfiguration = async () => {
     if (orderId) {
       const sessionId = searchParams.get("session_id");
-      
+
       try {
         // Get order details to determine the type
         const orderData = await getOrderDetails(orderId);
-        console.log('Manual continue - Order data:', orderData); // Debug log
-        const isArticleGeneration = orderData.order?.backlinkData?.type === 'ARTICLE_GENERATION';
-        console.log('Manual continue - Is article generation?', isArticleGeneration); // Debug log
-        
+        console.log("Manual continue - Order data:", orderData); // Debug log
+        const isArticleGeneration =
+          orderData.order?.backlinkData?.type === "ARTICLE_GENERATION";
+        console.log(
+          "Manual continue - Is article generation?",
+          isArticleGeneration
+        ); // Debug log
+
         if (isArticleGeneration) {
           navigate(`/configure-article?order_id=${orderId}`);
         } else {
-          navigate(`/configure-backlink?session_id=${sessionId}&order_id=${orderId}`);
+          navigate(
+            `/configure-backlink?session_id=${sessionId}&order_id=${orderId}`
+          );
         }
       } catch (error) {
-        console.error('Failed to get order type:', error);
-        console.error('Manual continue error details:', error.message);
+        console.error("Failed to get order type:", error);
+        console.error("Manual continue error details:", error.message);
         // Better fallback - go to home instead of potentially broken backlink page
         navigate("/");
       }

@@ -76,7 +76,8 @@ const CustomerArticleConfiguration: React.FC = () => {
   const [submittingReview, setSubmittingReview] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [generatedVersion, setGeneratedVersion] = useState<ArticleConfigurationResponse | null>(null);
+  const [generatedVersion, setGeneratedVersion] =
+    useState<ArticleConfigurationResponse | null>(null);
 
   const [formData, setFormData] = useState<ArticleConfigurationRequest>({
     orderId: orderId || "",
@@ -104,18 +105,20 @@ const CustomerArticleConfiguration: React.FC = () => {
       setLoading(true);
       const data = await getOrderDetails(orderId!);
       setOrderDetails(data.order);
-      
+
       // Pre-fill form with domain information if available
       if (data.order.article?.domain) {
-        setFormData(prev => ({
+        setFormData((prev) => ({
           ...prev,
           niche: data.order.article.niche || prev.niche,
           keyword: data.order.article.keyword || prev.keyword,
-          topic: data.order.article.topic || prev.topic
+          topic: data.order.article.topic || prev.topic,
         }));
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load order details");
+      setError(
+        err instanceof Error ? err.message : "Failed to load order details"
+      );
     } finally {
       setLoading(false);
     }
@@ -203,7 +206,7 @@ const CustomerArticleConfiguration: React.FC = () => {
     }));
   };
 
-  const parsed = generatedVersion 
+  const parsed = generatedVersion
     ? parseMarkdownWithFrontmatter(generatedVersion.content)
     : null;
 
@@ -225,12 +228,14 @@ const CustomerArticleConfiguration: React.FC = () => {
           <h1 className="text-2xl font-bold text-gray-900 mb-4">
             Configure Your Article
           </h1>
-          
+
           {orderDetails && (
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
               <h3 className="font-semibold text-blue-900">Order Details</h3>
               <p className="text-blue-800">Order ID: {orderDetails.id}</p>
-              <p className="text-blue-800">Domain: {orderDetails.article?.domain?.name}</p>
+              <p className="text-blue-800">
+                Domain: {orderDetails.article?.domain?.name}
+              </p>
               <p className="text-blue-800">Status: {orderDetails.status}</p>
             </div>
           )}
@@ -247,10 +252,18 @@ const CustomerArticleConfiguration: React.FC = () => {
             </div>
           )}
 
-          <form onSubmit={(e) => { e.preventDefault(); handleGenerateArticle(); }}>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleGenerateArticle();
+            }}
+          >
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label htmlFor="title" className="block text-sm font-medium text-gray-700 mb-2">
+                <label
+                  htmlFor="title"
+                  className="block text-sm font-medium text-gray-700 mb-2"
+                >
                   Article Title *
                 </label>
                 <input
@@ -267,7 +280,10 @@ const CustomerArticleConfiguration: React.FC = () => {
               </div>
 
               <div>
-                <label htmlFor="topic" className="block text-sm font-medium text-gray-700 mb-2">
+                <label
+                  htmlFor="topic"
+                  className="block text-sm font-medium text-gray-700 mb-2"
+                >
                   Topic *
                 </label>
                 <input
@@ -284,7 +300,10 @@ const CustomerArticleConfiguration: React.FC = () => {
               </div>
 
               <div>
-                <label htmlFor="niche" className="block text-sm font-medium text-gray-700 mb-2">
+                <label
+                  htmlFor="niche"
+                  className="block text-sm font-medium text-gray-700 mb-2"
+                >
                   Niche
                 </label>
                 <input
@@ -300,7 +319,10 @@ const CustomerArticleConfiguration: React.FC = () => {
               </div>
 
               <div>
-                <label htmlFor="keyword" className="block text-sm font-medium text-gray-700 mb-2">
+                <label
+                  htmlFor="keyword"
+                  className="block text-sm font-medium text-gray-700 mb-2"
+                >
                   Target Keyword
                 </label>
                 <input
@@ -316,7 +338,10 @@ const CustomerArticleConfiguration: React.FC = () => {
               </div>
 
               <div>
-                <label htmlFor="targetURL" className="block text-sm font-medium text-gray-700 mb-2">
+                <label
+                  htmlFor="targetURL"
+                  className="block text-sm font-medium text-gray-700 mb-2"
+                >
                   Target URL (Optional)
                 </label>
                 <input
@@ -332,7 +357,10 @@ const CustomerArticleConfiguration: React.FC = () => {
               </div>
 
               <div>
-                <label htmlFor="anchorText" className="block text-sm font-medium text-gray-700 mb-2">
+                <label
+                  htmlFor="anchorText"
+                  className="block text-sm font-medium text-gray-700 mb-2"
+                >
                   Anchor Text (Optional)
                 </label>
                 <input
@@ -348,7 +376,10 @@ const CustomerArticleConfiguration: React.FC = () => {
               </div>
 
               <div>
-                <label htmlFor="model" className="block text-sm font-medium text-gray-700 mb-2">
+                <label
+                  htmlFor="model"
+                  className="block text-sm font-medium text-gray-700 mb-2"
+                >
                   AI Model
                 </label>
                 <select
@@ -365,7 +396,10 @@ const CustomerArticleConfiguration: React.FC = () => {
               </div>
 
               <div>
-                <label htmlFor="provider" className="block text-sm font-medium text-gray-700 mb-2">
+                <label
+                  htmlFor="provider"
+                  className="block text-sm font-medium text-gray-700 mb-2"
+                >
                   Provider
                 </label>
                 <select
@@ -389,14 +423,30 @@ const CustomerArticleConfiguration: React.FC = () => {
               >
                 {generating ? (
                   <span className="flex items-center justify-center">
-                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    <svg
+                      className="animate-spin -ml-1 mr-3 h-5 w-5 text-white"
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                    >
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                      ></circle>
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                      ></path>
                     </svg>
                     Generating Article...
                   </span>
                 ) : (
-                  'Generate Article'
+                  "Generate Article"
                 )}
               </button>
             </div>
@@ -428,15 +478,15 @@ const CustomerArticleConfiguration: React.FC = () => {
                 disabled={generating}
                 className="px-6 py-2 bg-yellow-600 text-white rounded-md hover:bg-yellow-700 disabled:bg-gray-400 transition-colors"
               >
-                {generating ? 'Regenerating...' : 'Regenerate'}
+                {generating ? "Regenerating..." : "Regenerate"}
               </button>
-              
+
               <button
                 onClick={handleSubmitForReview}
                 disabled={submittingReview}
                 className="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:bg-gray-400 transition-colors"
               >
-                {submittingReview ? 'Submitting...' : 'Submit for Review'}
+                {submittingReview ? "Submitting..." : "Submit for Review"}
               </button>
             </div>
 
