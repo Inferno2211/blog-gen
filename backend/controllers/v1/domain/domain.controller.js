@@ -727,7 +727,41 @@ async function getDomainStatus(req, res) {
     }
 }
 
+// ===== PUBLIC ENDPOINTS =====
+
+// GET /api/v1/domain/browse
+// Browse domains for article requests (public endpoint)
+async function browseDomains(req, res) {
+    try {
+        const domains = await domainService.getAllDomains();
+        
+        // Filter out sensitive information and only return domains that are ready for articles
+        const publicDomains = domains.map(domain => ({
+            id: domain.id,
+            name: domain.name,
+            slug: domain.slug,
+            tags: domain.tags,
+            // You could add more public fields here if needed
+        }));
+
+        res.json({
+            success: true,
+            domains: publicDomains,
+            total: publicDomains.length
+        });
+    } catch (err) {
+        console.error('Failed to browse domains:', err);
+        res.status(500).json({ 
+            success: false,
+            error: 'Failed to load domains' 
+        });
+    }
+}
+
 module.exports = {
+    // Public Operations
+    browseDomains,
+
     // CRUD Operations
     createDomain,
     getDomain,

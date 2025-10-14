@@ -18,11 +18,15 @@ class EmailService {
    */
   async sendMagicLink(email, token, sessionData) {
     const magicLinkUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/verify?token=${token}`;
+    
+    const subject = sessionData.type === 'article_generation' 
+      ? 'Complete Your Article Generation Order - Magic Link Authentication'
+      : 'Complete Your Article Purchase - Magic Link Authentication';
 
     const emailData = {
       from: this.fromEmail,
       to: email,
-      subject: 'Complete Your Article Purchase - Magic Link Authentication',
+      subject: subject,
       html: this._generateMagicLinkTemplate(magicLinkUrl, sessionData)
     };
 
@@ -50,14 +54,20 @@ class EmailService {
    * Send completion notification email
    * @param {string} email - Customer email
    * @param {Object} articleData - Published article details
+   * @param {string} type - Type of completion ('backlink' or 'article_generation')
    * @returns {Promise<Object>} Email send result
    */
-  async sendCompletionNotification(email, articleData) {
+  async sendCompletionNotification(email, articleData, type = 'backlink') {
+    const isArticleGeneration = type === 'article_generation';
+    const subject = isArticleGeneration 
+      ? 'Your Custom Article is Live! - Article Generation Complete'
+      : 'Your Article is Live! - Backlink Successfully Added';
+    
     const emailData = {
       from: this.fromEmail,
       to: email,
-      subject: 'Your Article is Live! - Backlink Successfully Added',
-      html: this._generateCompletionTemplate(articleData)
+      subject,
+      html: this._generateCompletionTemplate(articleData, type)
     };
 
     return this._sendEmailWithRetry(emailData, 'completion_notification');
@@ -188,7 +198,7 @@ class EmailService {
         
         <p>Hello!</p>
         
-        <p>You've initiated a purchase for an article backlink. To complete your order, please click the secure link below:</p>
+        <p>You've initiated a purchase for ${sessionData.type === 'article_generation' ? 'a custom article generation' : 'an article backlink'}. To complete your order, please click the secure link below:</p>
         
         <div style="text-align: center;">
           <a href="${magicLinkUrl}" class="button">Complete Your Purchase</a>
@@ -200,10 +210,17 @@ class EmailService {
         
         <p><strong>Order Details:</strong></p>
         <ul>
-          <li><strong>Article:</strong> ${sessionData.articleTitle || 'Selected Article'}</li>
-          <li><strong>Keyword:</strong> ${sessionData.keyword}</li>
-          <li><strong>Target URL:</strong> ${sessionData.targetUrl}</li>
-          <li><strong>Price:</strong> $15.00</li>
+          ${sessionData.type === 'article_generation' ? `
+            <li><strong>Article Title:</strong> ${sessionData.articleTitle || 'Custom Article'}</li>
+            <li><strong>Domain:</strong> ${sessionData.domainName || 'Selected Domain'}</li>
+            <li><strong>Service:</strong> Custom Article Generation</li>
+            <li><strong>Price:</strong> $25.00</li>
+          ` : `
+            <li><strong>Article:</strong> ${sessionData.articleTitle || 'Selected Article'}</li>
+            <li><strong>Keyword:</strong> ${sessionData.keyword || 'N/A'}</li>
+            <li><strong>Target URL:</strong> ${sessionData.targetUrl || 'N/A'}</li>
+            <li><strong>Price:</strong> $15.00</li>
+          `}
         </ul>
         
         <p>After clicking the link, you'll be redirected to complete your payment securely through Stripe.</p>
@@ -283,7 +300,8 @@ class EmailService {
    * @returns {string} HTML email template
    * @private
    */
-  _generateCompletionTemplate(articleData) {
+  _generateCompletionTemplate(articleData, type = 'backlink') {
+    const isArticleGeneration = type === 'article_generation';
     const articleUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/articles/${articleData.slug}`;
 
     return `
@@ -292,7 +310,7 @@ class EmailService {
       <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Your Article is Live!</title>
+        <title>${isArticleGeneration ? 'Your Custom Article is Live!' : 'Your Article is Live!'}</title>
         <style>
           body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }
           .header { background: #d4edda; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
@@ -303,10 +321,12 @@ class EmailService {
       </head>
       <body>
         <div class="header">
-          <h1>🎉 Your Article is Live!</h1>
+          <h1>🎉 ${isArticleGeneration ? 'Your Custom Article is Live!' : 'Your Article is Live!'}</h1>
         </div>
         
-        <p>Great news! Your article has been approved and published. Your backlink is now live and ready to drive traffic to your website.</p>
+        <p>${isArticleGeneration ? 
+          'Excellent! Your custom article has been generated, reviewed, and published on your selected domain.' : 
+          'Great news! Your article has been approved and published. Your backlink is now live and ready to drive traffic to your website.'}</p>
         
         <div style="text-align: center;">
           <a href="${articleUrl}" class="button">View Your Article</a>
@@ -316,19 +336,32 @@ class EmailService {
           <h3>Article Details</h3>
           <p><strong>Title:</strong> ${articleData.title}</p>
           <p><strong>Published:</strong> ${new Date(articleData.published_at).toLocaleDateString()}</p>
+          ${isArticleGeneration ? `
+          <p><strong>Domain:</strong> ${articleData.domain?.name || 'Your Selected Domain'}</p>
+          <p><strong>Word Count:</strong> ${articleData.wordCount || 'Professional length'}</p>
+          <p><strong>SEO Optimized:</strong> Yes, with targeted keywords</p>
+          ` : `
           <p><strong>Your Backlink:</strong></p>
           <ul>
-            <li><strong>Anchor Text:</strong> ${articleData.backlinkData.keyword}</li>
-            <li><strong>Target URL:</strong> ${articleData.backlinkData.targetUrl}</li>
+            <li><strong>Anchor Text:</strong> ${articleData.backlinkData?.keyword || 'Your keyword'}</li>
+            <li><strong>Target URL:</strong> ${articleData.backlinkData?.targetUrl || 'Your URL'}</li>
             <li><strong>Link Type:</strong> Dofollow (passes SEO value)</li>
           </ul>
+          `}
         </div>
         
         <p><strong>What this means for you:</strong></p>
         <ul>
+          ${isArticleGeneration ? `
+          <li>Your custom article is now live and indexed by search engines</li>
+          <li>The content is SEO-optimized to help drive organic traffic</li>
+          <li>Professional quality content enhances your domain authority</li>
+          <li>Ready for social media sharing and marketing campaigns</li>
+          ` : `
           <li>Your backlink is now live and indexed by search engines</li>
           <li>The link will help improve your website's SEO authority</li>
           <li>Readers can discover your content through the contextual link</li>
+          `}
         </ul>
         
         <p>Thank you for choosing our service! We hope this backlink helps drive valuable traffic to your website.</p>

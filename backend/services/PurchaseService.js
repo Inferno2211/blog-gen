@@ -63,6 +63,99 @@ class PurchaseService {
     }
 
     /**
+     * Initialize article purchase order (separate from backlink purchases)
+     * @param {Object} articleData - { domainId, articleTitle, topic, niche, keyword, email, notes, price }
+     * @returns {Promise<{orderId: string, paymentUrl: string, sessionToken: string}>}
+     */
+    async initializeArticlePurchase(articleData) {
+        const { domainId, articleTitle, topic, niche, keyword, email, notes, price } = articleData;
+
+        // Validate inputs
+        if (!domainId || !articleTitle || !topic || !email) {
+            throw new Error('Missing required fields for article purchase');
+        }
+
+        // Validate email format
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) {
+            throw new Error('Invalid email format');
+        }
+
+        // Verify domain exists
+        const domain = await prisma.domain.findUnique({
+            where: { id: domainId }
+        });
+
+        if (!domain) {
+            throw new Error('Invalid domain ID');
+        }
+
+        try {
+            // Create article record first (with DRAFT status, will be updated after generation)
+            const article = await prisma.article.create({
+                data: {
+                    slug: this._generateSlug(articleTitle),
+                    topic: articleTitle, // Use articleTitle as the topic
+                    niche: niche || '',
+                    keyword: keyword || '',
+                    domain_id: domainId,
+                    status: 'DRAFT',
+                    availability_status: 'PROCESSING'
+                }
+            });
+
+            // Create purchase session with magic link token
+            const magicLinkToken = this._generateMagicLinkToken();
+            const magicLinkExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
+            const session = await prisma.purchaseSession.create({
+                data: {
+                    email: email.toLowerCase().trim(),
+                    article_id: article.id,
+                    backlink_data: {
+                        type: 'ARTICLE_GENERATION',
+                        articleTitle,
+                        topic,
+                        niche,
+                        keyword,
+                        notes: notes || ''
+                    },
+                    status: 'PENDING_AUTH',
+                    magic_link_token: magicLinkToken,
+                    magic_link_expires: magicLinkExpires
+                }
+            });
+
+            // Send magic link email
+            await this.emailService.sendMagicLink(
+                email,
+                magicLinkToken,
+                {
+                    sessionId: session.id,
+                    articleId: article.id,
+                    articleTitle: articleTitle,
+                    domainName: domain.name,
+                    type: 'article_generation'
+                }
+            );
+
+            console.log(`Article purchase initiated for ${email}, session: ${session.id}, article: ${article.id}`);
+
+            const magicLinkUrl = `${process.env.FRONTEND_BASE_URL || 'http://localhost:5173'}/verify?token=${magicLinkToken}`;
+            
+            return {
+                orderId: session.id,
+                paymentUrl: magicLinkUrl, // User gets magic link first, then payment after verification
+                sessionToken: magicLinkToken
+            };
+
+        } catch (error) {
+            console.error('Failed to initialize article purchase:', error);
+            throw new Error(`Failed to initiate article purchase: ${error.message}`);
+        }
+    }
+
+    /**
      * Verify and authenticate a session using magic link token
      * @param {string} sessionToken - The magic link token
      * @returns {Promise<{valid: boolean, sessionData?: Object}>}
@@ -75,7 +168,13 @@ class PurchaseService {
         try {
             const session = await prisma.purchaseSession.findUnique({
                 where: { magic_link_token: sessionToken },
-                include: { article: true }
+                include: { 
+                    article: true,
+                    orders: {
+                        orderBy: { created_at: 'desc' },
+                        take: 1
+                    }
+                }
             });
 
             if (!session) {
@@ -88,10 +187,36 @@ class PurchaseService {
             }
 
             // Check if session is in correct state for verification
-            // Allow PENDING_AUTH, AUTHENTICATED, and PAYMENT_PENDING states
-            const validStatesForVerification = ['PENDING_AUTH', 'AUTHENTICATED', 'PAYMENT_PENDING'];
+            // Allow PENDING_AUTH, AUTHENTICATED, PAYMENT_PENDING, and PAID states
+            const validStatesForVerification = ['PENDING_AUTH', 'AUTHENTICATED', 'PAYMENT_PENDING', 'PAID'];
             if (!validStatesForVerification.includes(session.status)) {
                 return { valid: false, error: `Session is not in valid state for authentication. Current status: ${session.status}` };
+            }
+
+            // Check if session already has payment completed
+            const isAlreadyPaid = session.status === 'PAID';
+            const existingOrder = session.orders[0]; // Most recent order
+
+            // If session is paid but user is verifying again, redirect them to configuration
+            if (isAlreadyPaid && existingOrder) {
+                console.log(`Session ${session.id} already paid, redirecting to configuration`);
+                
+                // Determine order type for proper redirection
+                const isArticleGeneration = session.backlink_data?.type === 'ARTICLE_GENERATION';
+                
+                return {
+                    valid: true,
+                    alreadyPaid: true,
+                    orderId: existingOrder.id,
+                    orderType: isArticleGeneration ? 'article_generation' : 'backlink',
+                    sessionData: {
+                        sessionId: session.id,
+                        email: session.email,
+                        article_id: session.article_id,
+                        backlink_data: session.backlink_data,
+                        articleTitle: session.article.slug
+                    }
+                };
             }
 
             // Update session status to authenticated (only if not already authenticated or beyond)
@@ -100,6 +225,63 @@ class PurchaseService {
                     where: { id: session.id },
                     data: { status: 'AUTHENTICATED' }
                 });
+            }
+
+            // For authenticated sessions, we need to create or check Stripe checkout session
+            if (session.status === 'AUTHENTICATED') {
+                const StripeService = require('./StripeService');
+                const stripeService = new StripeService();
+                
+                // Check if session already has a valid Stripe session
+                if (session.stripe_session_id) {
+                    console.log(`Session ${session.id} authenticated with existing Stripe session`);
+                    
+                    try {
+                        const stripeSession = await stripeService.verifyCheckoutSession(session.stripe_session_id);
+                        if (stripeSession.payment_status === 'unpaid') {
+                            return {
+                                valid: true,
+                                sessionData: {
+                                    sessionId: session.id,
+                                    email: session.email,
+                                    article_id: session.article_id,
+                                    backlink_data: session.backlink_data,
+                                    articleTitle: session.article.slug
+                                },
+                                stripeCheckoutUrl: `https://checkout.stripe.com/pay/${session.stripe_session_id}`
+                            };
+                        }
+                    } catch (stripeError) {
+                        console.log(`Stripe session ${session.stripe_session_id} invalid, will create new one`);
+                    }
+                }
+                
+                // Create new Stripe checkout session if needed
+                console.log(`Creating Stripe checkout session for session ${session.id}`);
+                
+                try {
+                    const checkoutSession = await stripeService.createCheckoutSession(session.id, {
+                        article_id: session.article_id,
+                        backlink_data: session.backlink_data,
+                        email: session.email,
+                        type: session.backlink_data?.type === 'ARTICLE_GENERATION' ? 'article_generation' : 'backlink'
+                    });
+                    
+                    return {
+                        valid: true,
+                        sessionData: {
+                            sessionId: session.id,
+                            email: session.email,
+                            article_id: session.article_id,
+                            backlink_data: session.backlink_data,
+                            articleTitle: session.article.slug
+                        },
+                        stripeCheckoutUrl: checkoutSession.url
+                    };
+                } catch (stripeError) {
+                    console.error(`Failed to create Stripe checkout session:`, stripeError);
+                    return { valid: false, error: 'Failed to create payment session' };
+                }
             }
 
             console.log(`Session verified - Session: ${session.id}, Email: ${session.email}`);
@@ -175,6 +357,10 @@ class PurchaseService {
             if (session.status === 'AUTHENTICATED') {
                 console.log(`Processing payment manually for session ${sessionId} (webhook may have failed)`);
                 
+                // Determine payment amount based on order type
+                const isArticleGeneration = session.backlink_data?.type === 'ARTICLE_GENERATION';
+                const amount = isArticleGeneration ? 2500 : 1500; // $25 for articles, $15 for backlinks
+                
                 // Create order record
                 const order = await prisma.order.create({
                     data: {
@@ -184,7 +370,7 @@ class PurchaseService {
                         backlink_data: session.backlink_data,
                         payment_data: {
                             stripe_session_id: stripeSessionId,
-                            amount: 1500, // $15.00 in cents
+                            amount: amount,
                             currency: 'usd',
                             status: 'completed'
                         },
@@ -399,6 +585,25 @@ class PurchaseService {
      */
     _generateMagicLinkToken() {
         return crypto.randomBytes(32).toString('hex');
+    }
+
+    /**
+     * Generate URL-friendly slug from title
+     * @param {string} title - Article title
+     * @returns {string} URL-friendly slug
+     */
+    _generateSlug(title) {
+        const baseSlug = title
+            .toLowerCase()
+            .replace(/[^a-z0-9\s-]/g, '') // Remove special characters
+            .replace(/\s+/g, '-') // Replace spaces with hyphens
+            .replace(/-+/g, '-') // Replace multiple hyphens with single
+            .replace(/^-|-$/g, ''); // Remove leading/trailing hyphens
+        
+        // Add timestamp to ensure uniqueness
+        const timestamp = Date.now().toString(36); // Convert to base36 for shorter string
+        const randomSuffix = Math.random().toString(36).substr(2, 5); // Add random suffix
+        return `${baseSlug}-${timestamp}-${randomSuffix}`;
     }
 
     /**
@@ -728,7 +933,7 @@ class PurchaseService {
                     backlink_review_status: 'PENDING_REVIEW',
                     last_qc_status: 'CUSTOMER_SUBMITTED',
                     last_qc_notes: {
-                        message: 'Customer submitted backlink integration for admin review',
+                        message: 'Customer submitted content for admin review',
                         type: 'customer_submission',
                         timestamp: new Date().toISOString()
                     }
@@ -762,6 +967,342 @@ class PurchaseService {
             console.error(`Customer backlink submission failed for order ${orderId}:`, error);
             throw new Error(`Failed to submit for review: ${error.message}`);
         }
+    }
+
+    /**
+     * Configure customer article generation
+     * @param {string} orderId - The order ID
+     * @param {Object} articleData - Article configuration data
+     * @param {Object} options - AI options { model?, provider? }
+     * @returns {Promise<Object>} Generation result
+     */
+    async configureCustomerArticle(orderId, articleData, options = {}) {
+        try {
+            console.log(`Starting article generation for order ${orderId}`);
+
+            // Get order details with proper error handling
+            console.log(`Looking for order with ID: ${orderId}`);
+            const order = await prisma.order.findUnique({
+                where: { id: orderId },
+                include: { 
+                    article: {
+                        include: {
+                            domain: true,
+                            versions: true
+                        }
+                    }
+                }
+            });
+
+            if (!order) {
+                console.log(`Order not found for ID: ${orderId}`);
+                
+                // Check if this is the common "pending" issue
+                if (orderId === "pending") {
+                    throw new Error("Invalid order ID 'pending'. Please check your payment status or start a new order.");
+                }
+                
+                // Try to find any orders to see what exists
+                const allOrders = await prisma.order.findMany({
+                    select: { id: true, status: true, customer_email: true, created_at: true },
+                    orderBy: { created_at: 'desc' },
+                    take: 5
+                });
+                console.log('Recent orders:', allOrders);
+                throw new Error(`Order not found with ID: ${orderId}. Please verify your order ID or check your payment status.`);
+            }
+
+            console.log(`Found order ${orderId} with status ${order.status}, article ID: ${order.article.id}`);
+
+            // Allow multiple statuses for configuration
+            if (!['PROCESSING', 'QUALITY_CHECK'].includes(order.status)) {
+                throw new Error(`Order must be in processing or quality_check status to configure article. Current status: ${order.status}`);
+            }
+
+            // Update order status to processing if not already (outside transaction)
+            if (order.status !== 'PROCESSING') {
+                await prisma.order.update({
+                    where: { id: orderId },
+                    data: { status: 'PROCESSING' }
+                });
+            }
+
+            // Generate article using existing core service (this takes a long time, so outside transaction)
+            console.log(`Starting AI generation for order ${orderId}...`);
+            let generationResult;
+            try {
+                generationResult = await this._generateCustomerArticle(
+                    order.article.id,
+                    order.article.domain,
+                    articleData,
+                    options
+                );
+                console.log(`AI generation completed for order ${orderId}, got version ${generationResult.versionId}`);
+            } catch (aiError) {
+                // Reset order status to allow retry
+                await prisma.order.update({
+                    where: { id: orderId },
+                    data: { status: 'PROCESSING' } // Keep it in processing for retry
+                });
+                throw new Error(`AI generation failed: ${aiError.message}`);
+            }
+
+            // Validate generation result
+            if (!generationResult || !generationResult.versionId) {
+                await prisma.order.update({
+                    where: { id: orderId },
+                    data: { status: 'PROCESSING' } // Keep it in processing for retry
+                });
+                throw new Error('AI generation did not produce a valid version');
+            }
+
+            // Use a quick transaction only for the final database updates
+            const result = await prisma.$transaction(async (tx) => {
+                // Verify order still exists and get current state
+                const currentOrder = await tx.order.findUnique({
+                    where: { id: orderId }
+                });
+
+                if (!currentOrder) {
+                    throw new Error(`Order ${orderId} no longer exists`);
+                }
+
+                // Prepare update data for the order
+                const updateData = {
+                    version_id: generationResult.versionId,
+                    status: 'QUALITY_CHECK' // Move to next stage
+                };
+                
+                // If a new article was created (initial generation case), update the article_id
+                if (generationResult.articleId && generationResult.articleId !== currentOrder.article_id) {
+                    console.log(`Updating order ${orderId} to reference new article ${generationResult.articleId}`);
+                    updateData.article_id = generationResult.articleId;
+                }
+
+                // Update the order within the transaction
+                await tx.order.update({
+                    where: { id: orderId },
+                    data: updateData
+                });
+
+                return generationResult;
+            }, {
+                timeout: 10000 // 10 second timeout should be enough for simple DB updates
+            });
+
+            console.log(`Article generation completed for order ${orderId}, version: ${result.versionId}`);
+            return result;
+
+        } catch (error) {
+            console.error(`Failed to configure article for order ${orderId}:`, error);
+            throw new Error(`Article generation failed: ${error.message}`);
+        }
+    }
+
+    /**
+     * Regenerate customer article content
+     * @param {string} orderId - The order ID
+     * @param {string} versionId - The version ID to regenerate
+     * @param {Object} articleData - Article configuration data
+     * @param {Object} options - AI options { model?, provider? }
+     * @returns {Promise<Object>} Regeneration result
+     */
+    async regenerateCustomerArticle(orderId, versionId, articleData, options = {}) {
+        try {
+            console.log(`Regenerating article for order ${orderId}, version ${versionId}`);
+
+            // Get order and version details
+            const order = await prisma.order.findUnique({
+                where: { id: orderId },
+                include: { 
+                    article: {
+                        include: {
+                            domain: true,
+                            versions: {
+                                where: { id: versionId }
+                            }
+                        }
+                    }
+                }
+            });
+
+            if (!order) {
+                throw new Error('Order not found');
+            }
+
+            if (order.article.versions.length === 0) {
+                throw new Error('Version not found');
+            }
+
+            if (order.version_id !== versionId) {
+                throw new Error('Version ID does not match order');
+            }
+
+            // Generate new article content (outside transaction due to long processing time)
+            console.log(`Starting AI regeneration for order ${orderId}...`);
+            let generationResult;
+            try {
+                generationResult = await this._generateCustomerArticle(
+                    order.article.id,
+                    order.article.domain,
+                    articleData,
+                    options
+                );
+                console.log(`AI regeneration completed for order ${orderId}, got version ${generationResult.versionId}`);
+            } catch (aiError) {
+                console.error(`AI regeneration failed for order ${orderId}:`, aiError);
+                throw new Error(`AI regeneration failed: ${aiError.message}`);
+            }
+
+            // Validate generation result
+            if (!generationResult || !generationResult.versionId) {
+                throw new Error('AI regeneration did not produce a valid version');
+            }
+
+            // Use a quick transaction only for the final database updates
+            const result = await prisma.$transaction(async (tx) => {
+                // Verify order still exists and get current state
+                const currentOrder = await tx.order.findUnique({
+                    where: { id: orderId }
+                });
+
+                if (!currentOrder) {
+                    throw new Error(`Order ${orderId} no longer exists`);
+                }
+
+                // Update order to point to new version (articleId should not change in regeneration)
+                await tx.order.update({
+                    where: { id: orderId },
+                    data: {
+                        version_id: generationResult.versionId,
+                        status: 'QUALITY_CHECK' // Reset to quality check for new version
+                    }
+                });
+
+                return generationResult;
+            }, {
+                timeout: 10000 // 10 second timeout should be enough for simple DB updates
+            });
+
+            console.log(`Article regeneration completed for order ${orderId}, new version: ${result.versionId}`);
+            return result;
+
+        } catch (error) {
+            console.error(`Failed to regenerate article for order ${orderId}:`, error);
+            throw new Error(`Article regeneration failed: ${error.message}`);
+        }
+    }
+
+    /**
+     * Generate article using AI service (create complete article, not just add backlink)
+     * @private
+     */
+    async _generateCustomerArticle(existingArticleId, domain, articleData, options = {}) {
+        try {
+            const { createVersionForArticle } = require('./articles/coreServices');
+            
+            // First check if this is a regeneration (article has existing versions)
+            const existingVersions = await prisma.articleVersion.findMany({
+                where: { article_id: existingArticleId },
+                orderBy: { version_num: 'desc' },
+                take: 1
+            });
+
+            if (existingVersions.length > 0) {
+                // This is a regeneration - use createVersionForArticle
+                const genParams = {
+                    niche: articleData.niche,
+                    keyword: articleData.keyword,
+                    topic: articleData.topic,
+                    n: 3, // Default number of sections
+                    targetURL: articleData.targetURL,
+                    anchorText: articleData.anchorText,
+                    model: options.model || 'gemini-2.5-flash',
+                    provider: options.provider || 'gemini',
+                    internalLinkEnabled: true, // Enable internal linking for customer articles
+                    noExternalBacklinks: !articleData.targetURL // Only add external backlink if provided
+                };
+
+                const result = await createVersionForArticle(existingArticleId, genParams, 3);
+
+                // Update article metadata
+                await prisma.article.update({
+                    where: { id: existingArticleId },
+                    data: {
+                        topic: articleData.topic,
+                        niche: articleData.niche,
+                        keyword: articleData.keyword,
+                        backlink_target: articleData.targetURL || null,
+                        anchor: articleData.anchorText || null
+                    }
+                });
+
+                return {
+                    versionId: result.versionId,
+                    versionNum: result.versionNum,
+                    content: result.content,
+                    previewContent: this._generatePreviewContent(result.content)
+                };
+            } else {
+                // This is initial generation - use createVersionForArticle instead of deleting/recreating
+                // Update the existing article first, then generate content
+                await prisma.article.update({
+                    where: { id: existingArticleId },
+                    data: {
+                        topic: articleData.topic,
+                        niche: articleData.niche,
+                        keyword: articleData.keyword,
+                        backlink_target: articleData.targetURL || null,
+                        anchor: articleData.anchorText || null,
+                        status: 'DRAFT'
+                    }
+                });
+
+                // Prepare generation parameters
+                const genParams = {
+                    niche: articleData.niche,
+                    keyword: articleData.keyword,
+                    topic: articleData.topic,
+                    n: 3, // Default number of sections
+                    targetURL: articleData.targetURL,
+                    anchorText: articleData.anchorText,
+                    model: options.model || 'gemini-2.5-flash',
+                    provider: options.provider || 'gemini',
+                    internalLinkEnabled: true, // Enable internal linking for customer articles
+                    noExternalBacklinks: !articleData.targetURL // Only add external backlink if provided
+                };
+
+                // Use createVersionForArticle for consistency
+                const result = await createVersionForArticle(existingArticleId, genParams, 3);
+
+                return {
+                    // Don't return articleId since we're using the existing article
+                    versionId: result.versionId,
+                    versionNum: result.versionNum,
+                    content: result.content,
+                    previewContent: this._generatePreviewContent(result.content)
+                };
+            }
+
+        } catch (error) {
+            throw new Error(`AI article generation failed: ${error.message}`);
+        }
+    }
+
+    /**
+     * Generate preview content (first 500 characters)
+     * @private
+     */
+    _generatePreviewContent(content) {
+        // Remove frontmatter
+        const contentWithoutFrontmatter = content.replace(/^---[\s\S]*?---\n/, '');
+        
+        // Get first paragraph after title
+        const lines = contentWithoutFrontmatter.split('\n');
+        const bodyLines = lines.filter(line => !line.startsWith('#') && line.trim().length > 0);
+        const previewText = bodyLines.slice(0, 3).join(' ').substring(0, 500);
+        
+        return previewText + (previewText.length >= 500 ? '...' : '');
     }
 
     // Private helper methods

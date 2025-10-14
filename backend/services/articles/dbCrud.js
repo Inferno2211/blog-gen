@@ -254,19 +254,25 @@ async function approveAndPublish(versionId, adminId, reviewNotes) {
                         });
                         
                         // Send completion notification to customer
+                        const isArticleGeneration = order.backlink_data?.type === 'ARTICLE_GENERATION';
                         const articleData = {
-                            title: article.slug,
+                            title: article.title || article.slug,
                             slug: article.slug,
                             published_at: new Date(),
-                            backlinkData: {
-                                keyword: order.backlink_data.keyword,
-                                targetUrl: order.backlink_data.target_url
-                            }
+                            domain: article.domain,
+                            wordCount: approvedVersion.content_md ? approvedVersion.content_md.length : undefined,
+                            ...(isArticleGeneration ? {} : {
+                                backlinkData: {
+                                    keyword: order.backlink_data.keyword,
+                                    targetUrl: order.backlink_data.target_url
+                                }
+                            })
                         };
                         
                         await emailService.sendCompletionNotification(
                             order.customer_email,
-                            articleData
+                            articleData,
+                            isArticleGeneration ? 'article_generation' : 'backlink'
                         );
                         
                         console.log(`Order ${order.id} completed and customer notified`);

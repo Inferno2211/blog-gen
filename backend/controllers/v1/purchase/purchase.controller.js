@@ -3,6 +3,7 @@ const SessionService = require('../../../services/SessionService');
 const EmailService = require('../../../services/EmailService');
 const StripeService = require('../../../services/StripeService');
 const { ValidationError, NotFoundError, ConflictError } = require('../../../services/errors');
+const prisma = require('../../../db/prisma');
 
 /**
  * Purchase Controller - Handles API endpoints for the article backlink purchase system
@@ -139,10 +140,47 @@ class PurchaseController {
                 });
             }
 
-            // Create Stripe checkout session
+            // Check if session is already paid - if so, get order details and redirect to configuration
+            const session = await prisma.purchaseSession.findUnique({
+                where: { magic_link_token: sessionToken },
+                include: {
+                    orders: {
+                        orderBy: { created_at: 'desc' },
+                        take: 1
+                    }
+                }
+            });
+
+            if (session && session.status === 'PAID') {
+                // Session is already paid, return order details for redirect to configuration
+                const order = session.orders[0];
+                if (order) {
+                    const isArticleGeneration = result.sessionData.backlink_data?.type === 'ARTICLE_GENERATION';
+                    
+                    return res.status(200).json({
+                        success: true,
+                        message: 'Session already paid - redirect to configuration',
+                        data: {
+                            valid: true,
+                            sessionData: result.sessionData,
+                            alreadyPaid: true,
+                            orderId: order.id,
+                            orderType: isArticleGeneration ? 'article_generation' : 'backlink',
+                            redirectUrl: `/configure-${isArticleGeneration ? 'article' : 'backlink'}?order_id=${order.id}`
+                        }
+                    });
+                }
+            }
+
+            // Create Stripe checkout session for unpaid sessions
+            const sessionDataWithType = {
+                ...result.sessionData,
+                type: result.sessionData.backlink_data?.type === 'ARTICLE_GENERATION' ? 'article_generation' : 'backlink'
+            };
+            
             const checkoutSession = await this.stripeService.createCheckoutSession(
                 result.sessionData.sessionId,
-                result.sessionData
+                sessionDataWithType
             );
 
             res.status(200).json({
@@ -357,27 +395,69 @@ class PurchaseController {
             if (!orderId) {
                 throw new ValidationError('Order ID is required');
             }
-            if (!backlinkUrl) {
-                throw new ValidationError('Backlink URL is required');
-            }
-            if (!anchorText) {
-                throw new ValidationError('Anchor text is required');
+
+            // Get order to check if it's article generation or backlink integration
+            const order = await prisma.order.findUnique({
+                where: { id: orderId },
+                include: { session: true }
+            });
+
+            if (!order) {
+                throw new ValidationError('Order not found');
             }
 
-            // Validate URL format
-            try {
-                new URL(backlinkUrl);
-            } catch {
-                throw new ValidationError('Invalid backlink URL format');
-            }
+            // Check if this is an article generation order
+            const isArticleGeneration = order.session?.backlink_data?.type === 'ARTICLE_GENERATION';
 
-            // Process backlink configuration
-            const result = await this.purchaseService.configureCustomerBacklink(
-                orderId,
-                backlinkUrl,
-                anchorText,
-                { model: model || 'gemini-2.5-flash', provider: provider || 'gemini' }
-            );
+            let result;
+            if (isArticleGeneration) {
+                // For article generation, we need different parameters
+                const { title, topic, niche, keyword, targetURL, anchorText: articleAnchorText } = req.body;
+                
+                if (!title) {
+                    throw new ValidationError('Article title is required');
+                }
+                if (!topic) {
+                    throw new ValidationError('Article topic is required');
+                }
+
+                // Process article generation configuration
+                result = await this.purchaseService.configureCustomerArticle(
+                    orderId,
+                    {
+                        title,
+                        topic,
+                        niche: niche || '',
+                        keyword: keyword || '',
+                        targetURL: targetURL || '',
+                        anchorText: articleAnchorText || ''
+                    },
+                    { model: model || 'gemini-2.5-flash', provider: provider || 'gemini' }
+                );
+            } else {
+                // Original backlink integration logic
+                if (!backlinkUrl) {
+                    throw new ValidationError('Backlink URL is required');
+                }
+                if (!anchorText) {
+                    throw new ValidationError('Anchor text is required');
+                }
+
+                // Validate URL format
+                try {
+                    new URL(backlinkUrl);
+                } catch {
+                    throw new ValidationError('Invalid backlink URL format');
+                }
+
+                // Process backlink configuration
+                result = await this.purchaseService.configureCustomerBacklink(
+                    orderId,
+                    backlinkUrl,
+                    anchorText,
+                    { model: model || 'gemini-2.5-flash', provider: provider || 'gemini' }
+                );
+            }
 
             res.status(200).json({
                 success: true,
@@ -408,32 +488,182 @@ class PurchaseController {
             if (!versionId) {
                 throw new ValidationError('Version ID is required');
             }
-            if (!backlinkUrl) {
-                throw new ValidationError('Backlink URL is required');
-            }
-            if (!anchorText) {
-                throw new ValidationError('Anchor text is required');
+
+            // Get order to check if it's article generation or backlink integration
+            const order = await prisma.order.findUnique({
+                where: { id: orderId },
+                include: { session: true }
+            });
+
+            if (!order) {
+                throw new ValidationError('Order not found');
             }
 
-            // Validate URL format
-            try {
-                new URL(backlinkUrl);
-            } catch {
-                throw new ValidationError('Invalid backlink URL format');
+            // Check if this is an article generation order
+            const isArticleGeneration = order.session?.backlink_data?.type === 'ARTICLE_GENERATION';
+
+            let result;
+            if (isArticleGeneration) {
+                // For article generation, we need different parameters
+                const { title, topic, niche, keyword, targetURL, anchorText: articleAnchorText } = req.body;
+                
+                if (!title) {
+                    throw new ValidationError('Article title is required');
+                }
+                if (!topic) {
+                    throw new ValidationError('Article topic is required');
+                }
+
+                // Regenerate article content
+                result = await this.purchaseService.regenerateCustomerArticle(
+                    orderId,
+                    versionId,
+                    {
+                        title,
+                        topic,
+                        niche: niche || '',
+                        keyword: keyword || '',
+                        targetURL: targetURL || '',
+                        anchorText: articleAnchorText || ''
+                    },
+                    { model: model || 'gemini-2.5-flash', provider: provider || 'gemini' }
+                );
+            } else {
+                // Original backlink regeneration logic
+                if (!backlinkUrl) {
+                    throw new ValidationError('Backlink URL is required');
+                }
+                if (!anchorText) {
+                    throw new ValidationError('Anchor text is required');
+                }
+
+                // Validate URL format
+                try {
+                    new URL(backlinkUrl);
+                } catch {
+                    throw new ValidationError('Invalid backlink URL format');
+                }
+
+                // Regenerate backlink content
+                result = await this.purchaseService.regenerateCustomerBacklink(
+                    orderId,
+                    versionId,
+                    backlinkUrl,
+                    anchorText,
+                    { model: model || 'gemini-2.5-flash', provider: provider || 'gemini' }
+                );
             }
 
-            // Regenerate backlink content
-            const result = await this.purchaseService.regenerateCustomerBacklink(
+            res.status(200).json({
+                success: true,
+                message: 'Backlink content regenerated successfully',
+                versionId: result.versionId,
+                versionNum: result.versionNum,
+                content: result.content,
+                previewContent: result.previewContent
+            });
+
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    /**
+     * POST /api/v1/purchase/configure-article
+     * Configure article generation for a customer order
+     */
+    async configureArticle(req, res, next) {
+        try {
+            const { orderId, title, niche, keyword, topic, targetURL, anchorText, model, provider } = req.body;
+
+            // Validate required fields
+            if (!orderId) {
+                throw new ValidationError('Order ID is required');
+            }
+            if (!title) {
+                throw new ValidationError('Article title is required');
+            }
+            if (!topic) {
+                throw new ValidationError('Article topic is required');
+            }
+
+            // Validate URL format if provided
+            if (targetURL) {
+                try {
+                    new URL(targetURL);
+                } catch {
+                    throw new ValidationError('Invalid target URL format');
+                }
+            }
+
+            // Process article generation
+            const result = await this.purchaseService.configureCustomerArticle(
                 orderId,
-                versionId,
-                backlinkUrl,
-                anchorText,
+                {
+                    title,
+                    niche: niche || '',
+                    keyword: keyword || '',
+                    topic,
+                    targetURL: targetURL || '',
+                    anchorText: anchorText || ''
+                },
                 { model: model || 'gemini-2.5-flash', provider: provider || 'gemini' }
             );
 
             res.status(200).json({
                 success: true,
-                message: 'Backlink content regenerated successfully',
+                message: 'Article generated successfully',
+                versionId: result.versionId,
+                versionNum: result.versionNum,
+                content: result.content,
+                previewContent: result.previewContent
+            });
+
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    /**
+     * POST /api/v1/purchase/regenerate-article
+     * Regenerate article content for a customer order
+     */
+    async regenerateArticle(req, res, next) {
+        try {
+            const { orderId, versionId, title, niche, keyword, topic, targetURL, anchorText, model, provider } = req.body;
+
+            // Validate required fields
+            if (!orderId) {
+                throw new ValidationError('Order ID is required');
+            }
+            if (!versionId) {
+                throw new ValidationError('Version ID is required');
+            }
+            if (!title) {
+                throw new ValidationError('Article title is required');
+            }
+            if (!topic) {
+                throw new ValidationError('Article topic is required');
+            }
+
+            // Regenerate article content
+            const result = await this.purchaseService.regenerateCustomerArticle(
+                orderId,
+                versionId,
+                {
+                    title,
+                    niche: niche || '',
+                    keyword: keyword || '',
+                    topic,
+                    targetURL: targetURL || '',
+                    anchorText: anchorText || ''
+                },
+                { model: model || 'gemini-2.5-flash', provider: provider || 'gemini' }
+            );
+
+            res.status(200).json({
+                success: true,
+                message: 'Article regenerated successfully',
                 versionId: result.versionId,
                 versionNum: result.versionNum,
                 content: result.content,
@@ -471,6 +701,59 @@ class PurchaseController {
                 success: true,
                 message: 'Article submitted for admin review successfully',
                 reviewId: result.reviewId
+            });
+
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    /**
+     * POST /api/v1/purchase/initiate-article
+     * Initiate a new article purchase order and send magic link
+     */
+    async initiateArticlePurchase(req, res, next) {
+        try {
+            const { domainId, articleTitle, topic, niche, keyword, email, notes, type } = req.body;
+
+            // Validate required fields
+            if (!domainId) {
+                throw new ValidationError('Domain ID is required');
+            }
+            if (!articleTitle) {
+                throw new ValidationError('Article title is required');
+            }
+            if (!topic) {
+                throw new ValidationError('Topic is required');
+            }
+            if (!email) {
+                throw new ValidationError('Email is required');
+            }
+
+            // Validate email format
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(email)) {
+                throw new ValidationError('Invalid email format');
+            }
+
+            // Create article purchase order
+            const result = await this.purchaseService.initializeArticlePurchase({
+                domainId,
+                articleTitle,
+                topic,
+                niche: niche || '',
+                keyword: keyword || '',
+                email,
+                notes: notes || '',
+                price: 25.00 // Fixed price for article generation
+            });
+
+            res.status(200).json({
+                success: true,
+                message: 'Article purchase initiated successfully. Check your email for the magic link.',
+                orderId: result.orderId,
+                paymentUrl: result.paymentUrl,
+                sessionToken: result.sessionToken
             });
 
         } catch (error) {
@@ -526,8 +809,23 @@ module.exports = {
         return controller.regenerateBacklink(req, res, next);
     },
 
+    async configureArticle(req, res, next) {
+        const controller = new PurchaseController();
+        return controller.configureArticle(req, res, next);
+    },
+
+    async regenerateArticle(req, res, next) {
+        const controller = new PurchaseController();
+        return controller.regenerateArticle(req, res, next);
+    },
+
     async submitForReview(req, res, next) {
         const controller = new PurchaseController();
         return controller.submitForReview(req, res, next);
+    },
+
+    async initiateArticlePurchase(req, res, next) {
+        const controller = new PurchaseController();
+        return controller.initiateArticlePurchase(req, res, next);
     }
 };

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { CheckCircle, Home } from "lucide-react";
-import { completePurchase } from "../services/purchaseService";
+import { completePurchase, getOrderDetails } from "../services/purchaseService";
 
 export default function PaymentSuccess() {
   const [searchParams] = useSearchParams();
@@ -35,12 +35,29 @@ export default function PaymentSuccess() {
 
       if (response.success && response.data.orderId) {
         setOrderId(response.data.orderId);
-        // Automatically redirect to backlink configuration after 3 seconds
-        setTimeout(() => {
-          const sessionId = searchParams.get("session_id");
-          navigate(
-            `/configure-backlink?session_id=${sessionId}&order_id=${response.data.orderId}`
-          );
+        // Automatically redirect to appropriate configuration after 3 seconds
+        setTimeout(async () => {
+          try {
+            const orderData = await getOrderDetails(response.data.orderId);
+            console.log('Order data for redirect:', orderData); // Debug log
+            const isArticleGeneration = orderData.order?.backlinkData?.type === 'ARTICLE_GENERATION';
+            console.log('Is article generation?', isArticleGeneration, orderData.order?.backlinkData); // Debug log
+            
+            if (isArticleGeneration) {
+              console.log('Redirecting to article configuration'); // Debug log
+              navigate(`/configure-article?order_id=${response.data.orderId}`);
+            } else {
+              console.log('Redirecting to backlink configuration'); // Debug log
+              const sessionId = searchParams.get("session_id");
+              navigate(`/configure-backlink?session_id=${sessionId}&order_id=${response.data.orderId}`);
+            }
+          } catch (error) {
+            console.error('Failed to get order type for redirect:', error);
+            console.error('Error details:', error.message, error.stack);
+            // Better fallback - try to determine from URL or default to home
+            console.log('Falling back to home page due to error');
+            navigate("/");
+          }
         }, 3000);
       } else {
         setError("Failed to complete order");
@@ -54,12 +71,28 @@ export default function PaymentSuccess() {
     }
   };
 
-  const handleContinueToConfiguration = () => {
+  const handleContinueToConfiguration = async () => {
     if (orderId) {
       const sessionId = searchParams.get("session_id");
-      navigate(
-        `/configure-backlink?session_id=${sessionId}&order_id=${orderId}`
-      );
+      
+      try {
+        // Get order details to determine the type
+        const orderData = await getOrderDetails(orderId);
+        console.log('Manual continue - Order data:', orderData); // Debug log
+        const isArticleGeneration = orderData.order?.backlinkData?.type === 'ARTICLE_GENERATION';
+        console.log('Manual continue - Is article generation?', isArticleGeneration); // Debug log
+        
+        if (isArticleGeneration) {
+          navigate(`/configure-article?order_id=${orderId}`);
+        } else {
+          navigate(`/configure-backlink?session_id=${sessionId}&order_id=${orderId}`);
+        }
+      } catch (error) {
+        console.error('Failed to get order type:', error);
+        console.error('Manual continue error details:', error.message);
+        // Better fallback - go to home instead of potentially broken backlink page
+        navigate("/");
+      }
     }
   };
 
@@ -114,13 +147,13 @@ export default function PaymentSuccess() {
             </h1>
             <p className="text-gray-600 mb-8">
               Your payment has been processed successfully. You will now be
-              redirected to configure your backlink integration.
+              redirected to configure your order.
             </p>
 
             {/* Auto-redirect message */}
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-8">
               <p className="text-blue-800 text-sm">
-                Redirecting to backlink configuration in a few seconds...
+                Redirecting to configuration in a few seconds...
               </p>
             </div>
 
@@ -131,7 +164,7 @@ export default function PaymentSuccess() {
                 className="inline-flex items-center px-6 py-3 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700 transition-colors"
               >
                 <CheckCircle className="w-4 h-4 mr-2" />
-                Configure Backlink Now
+                Configure Order Now
               </button>
               <button
                 onClick={handleReturnHome}

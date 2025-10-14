@@ -85,6 +85,9 @@ export interface SessionVerifyResponse {
     orderId?: string;
   };
   stripeCheckoutUrl?: string;
+  alreadyPaid?: boolean;
+  orderId?: string;
+  orderType?: string;
   error?: string;
 }
 

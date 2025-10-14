@@ -12,22 +12,31 @@ class StripeService {
     this.prisma = new PrismaClient();
     this.webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
     
-    // Fixed pricing: $15.00 USD
+    // Pricing: $15.00 USD for backlinks, $25.00 USD for article generation
     this.BACKLINK_PRICE = 1500; // in cents
+    this.ARTICLE_GENERATION_PRICE = 2500; // in cents
     this.CURRENCY = 'usd';
   }
 
   /**
-   * Create a Stripe checkout session for backlink purchase
+   * Create a Stripe checkout session for purchase (backlink or article generation)
    * @param {string} sessionId - Purchase session ID
    * @param {Object} sessionData - Session data including article and backlink info
    * @returns {Promise<Object>} Stripe checkout session
    */
   async createCheckoutSession(sessionId, sessionData) {
     try {
-      const { article_id, backlink_data, email } = sessionData;
+      const { article_id, backlink_data, email, type } = sessionData;
+      const isArticleGeneration = type === 'article_generation';
       
-      // Create checkout session with fixed pricing
+      // Determine pricing and product details based on type
+      const price = isArticleGeneration ? this.ARTICLE_GENERATION_PRICE : this.BACKLINK_PRICE;
+      const productName = isArticleGeneration ? 'Custom Article Generation' : 'Article Backlink Placement';
+      const description = isArticleGeneration 
+        ? `Custom AI-generated article for domain with title: "${backlink_data.articleTitle || 'Custom Article'}"` 
+        : `Contextual backlink placement for "${backlink_data.keyword}" in article ${article_id}`;
+      
+      // Create checkout session with dynamic pricing
       const checkoutSession = await this.stripe.checkout.sessions.create({
         payment_method_types: ['card'],
         line_items: [
@@ -35,15 +44,21 @@ class StripeService {
             price_data: {
               currency: this.CURRENCY,
               product_data: {
-                name: 'Article Backlink Placement',
-                description: `Contextual backlink placement for "${backlink_data.keyword}" in article ${article_id}`,
-                metadata: {
+                name: productName,
+                description,
+                metadata: isArticleGeneration ? {
+                  type: 'article_generation',
+                  domain_id: backlink_data.domainId,
+                  article_title: backlink_data.articleTitle || 'Custom Article',
+                  focus_keywords: backlink_data.focusKeywords || ''
+                } : {
+                  type: 'backlink',
                   article_id,
                   keyword: backlink_data.keyword,
                   target_url: backlink_data.target_url
                 }
               },
-              unit_amount: this.BACKLINK_PRICE,
+              unit_amount: price,
             },
             quantity: 1,
           },
@@ -54,10 +69,18 @@ class StripeService {
         customer_email: email,
         metadata: {
           purchase_session_id: sessionId,
-          article_id,
-          keyword: backlink_data.keyword,
-          target_url: backlink_data.target_url,
-          notes: backlink_data.notes || ''
+          type: type || 'backlink',
+          ...(isArticleGeneration ? {
+            domain_id: backlink_data.domainId,
+            article_title: backlink_data.articleTitle || 'Custom Article',
+            focus_keywords: backlink_data.focusKeywords || '',
+            notes: backlink_data.notes || ''
+          } : {
+            article_id,
+            keyword: backlink_data.keyword,
+            target_url: backlink_data.target_url,
+            notes: backlink_data.notes || ''
+          })
         },
         expires_at: Math.floor(Date.now() / 1000) + (30 * 60), // 30 minutes
       });
@@ -133,17 +156,50 @@ class StripeService {
         }
       });
 
+      // Get the purchase session to determine order type
+      const purchaseSession = await this.prisma.purchaseSession.findUnique({
+        where: { id: purchaseSessionId },
+        include: { article: true }
+      });
+
+      if (!purchaseSession) {
+        throw new AppError('Purchase session not found', 404, 'SESSION_NOT_FOUND');
+      }
+
+      // Determine if this is article generation or backlink order
+      const isArticleGeneration = session.metadata.type === 'article_generation';
+      
+      // For article generation, use the article_id from the session (created during initiation)
+      // For backlinks, use the article_id from metadata
+      const articleId = isArticleGeneration 
+        ? purchaseSession.article_id 
+        : session.metadata.article_id;
+
+      if (!articleId) {
+        throw new AppError(`Article ID not found for ${isArticleGeneration ? 'article generation' : 'backlink'} order`, 400, 'ARTICLE_ID_MISSING');
+      }
+
+      // Prepare backlink_data based on order type
+      const backlinkData = isArticleGeneration ? {
+        type: 'ARTICLE_GENERATION',
+        articleTitle: session.metadata.article_title || 'Custom Article',
+        topic: session.metadata.focus_keywords || '',
+        niche: '',
+        keyword: session.metadata.focus_keywords || '',
+        notes: session.metadata.notes || ''
+      } : {
+        keyword: session.metadata.keyword,
+        target_url: session.metadata.target_url,
+        notes: session.metadata.notes || null
+      };
+
       // Create order record
       const order = await this.prisma.order.create({
         data: {
           session_id: purchaseSessionId,
-          article_id: session.metadata.article_id,
+          article_id: articleId,
           customer_email: session.customer_email,
-          backlink_data: {
-            keyword: session.metadata.keyword,
-            target_url: session.metadata.target_url,
-            notes: session.metadata.notes || null
-          },
+          backlink_data: backlinkData,
           payment_data: {
             stripe_session_id: stripeSessionId,
             amount: session.amount_total,

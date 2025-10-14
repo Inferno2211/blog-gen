@@ -37,12 +37,12 @@ async function getInternalLinkCandidates(domainId, excludeArticleId) {
             domain_id: domainId,
             id: excludeArticleId ? { not: excludeArticleId } : undefined
         },
-        select: { id: true, slug: true, topic: true, title: true }
+        select: { id: true, slug: true, topic: true }
     });
     return candidates
         .filter(a => a.slug)
         .map(a => ({
-            title: a.title || a.topic || a.slug,
+            title: a.topic || a.slug,
             slug: a.slug,
             url: `/posts/${a.slug}/`
         }));
@@ -59,10 +59,16 @@ function countExternalLinks(markdown) {
 /** Helper: check specific backlink exists (anchor + URL) */
 function hasSpecificBacklink(markdown, targetUrl, anchorText) {
     if (!targetUrl || !anchorText) return false;
-    const escapedUrl = targetUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const escapedAnchor = anchorText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const regex = new RegExp(`\\[([^\\]]*${escapedAnchor}[^\\]]*)\\]\\(${escapedUrl}\\)`, 'i');
-    return regex.test(markdown);
+    const escapedUrl = targetUrl.replace(/[.*+?^${}()|[\]\\:]/g, '\\$&');
+    const escapedAnchor = anchorText.replace(/[.*+?^${}()|[\]\\:]/g, '\\$&');
+    try {
+        const regex = new RegExp(`\\[([^\\]]*${escapedAnchor}[^\\]]*)\\]\\(${escapedUrl}\\)`, 'i');
+        return regex.test(markdown);
+    } catch (error) {
+        console.warn('Invalid regex for backlink check:', { targetUrl, anchorText }, error.message);
+        // Fallback to simple string search
+        return markdown.includes(`[${anchorText}](${targetUrl})`) || markdown.includes(`](${targetUrl})`);
+    }
 }
 
 /** Helper: count internal links to /posts/... */
@@ -79,9 +85,16 @@ function hasInternalLinkToCandidates(markdown, candidates = []) {
     return candidates.some((c) => {
         const url = c?.url || '';
         if (!url) return false;
-        const escapedUrl = url.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const regex = new RegExp(`\\]\(${escapedUrl}\\)`, 'i');
-        return regex.test(markdown);
+        // More robust escaping for URLs that might contain special regex characters
+        const escapedUrl = url.replace(/[.*+?^${}()|[\]\\:]/g, '\\$&');
+        try {
+            const regex = new RegExp(`\\]\(${escapedUrl}\\)`, 'i');
+            return regex.test(markdown);
+        } catch (error) {
+            console.warn('Invalid regex for URL:', url, error.message);
+            // Fallback to simple string search
+            return markdown.includes(`](${url})`);
+        }
     });
 }
 

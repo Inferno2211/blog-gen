@@ -3,6 +3,11 @@ const router = express.Router();
 const domainController = require('../../../controllers/v1/domain/domain.controller');
 const { authenticateAdmin } = require('../../../middleware/auth');
 
+// ===== PUBLIC ENDPOINTS =====
+
+// Browse domains for article requests (public endpoint)
+router.get('/browse', domainController.browseDomains);
+
 // ===== DOMAIN CRUD OPERATIONS =====
 
 // Create domain
