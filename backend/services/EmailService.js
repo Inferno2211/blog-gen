@@ -432,6 +432,282 @@ class EmailService {
       </html>
     `;
   }
+
+  /**
+   * Send article ready email - notify customer their article is ready for review
+   * @param {string} email - Customer email
+   * @param {Object} articleData - Article details
+   * @returns {Promise<Object>} Email send result
+   */
+  async sendArticleReadyEmail(email, articleData) {
+    const emailData = {
+      from: this.fromEmail,
+      to: email,
+      subject: `Your Article is Ready for Review - Order #${articleData.orderId}`,
+      html: this._generateArticleReadyTemplate(articleData)
+    };
+
+    return this._sendEmailWithRetry(emailData, 'article_ready');
+  }
+
+  /**
+   * Send backlink integrated email - notify customer their backlink has been integrated
+   * @param {string} email - Customer email
+   * @param {Object} backlinkData - Backlink integration details
+   * @returns {Promise<Object>} Email send result
+   */
+  async sendBacklinkIntegratedEmail(email, backlinkData) {
+    const emailData = {
+      from: this.fromEmail,
+      to: email,
+      subject: `Your Backlink is Ready for Review - Order #${backlinkData.orderId}`,
+      html: this._generateBacklinkIntegratedTemplate(backlinkData)
+    };
+
+    return this._sendEmailWithRetry(emailData, 'backlink_integrated');
+  }
+
+  /**
+   * Send revision ready email - notify customer their revision is ready
+   * @param {string} email - Customer email
+   * @param {Object} revisionData - Revision details
+   * @returns {Promise<Object>} Email send result
+   */
+  async sendRevisionReadyEmail(email, revisionData) {
+    const emailData = {
+      from: this.fromEmail,
+      to: email,
+      subject: `Your Revision is Ready - Order #${revisionData.orderId}`,
+      html: this._generateRevisionReadyTemplate(revisionData)
+    };
+
+    return this._sendEmailWithRetry(emailData, 'revision_ready');
+  }
+
+  /**
+   * Send order failed email - notify customer their order processing failed
+   * @param {string} email - Customer email
+   * @param {Object} failureData - Failure details
+   * @returns {Promise<Object>} Email send result
+   */
+  async sendOrderFailedEmail(email, failureData) {
+    const emailData = {
+      from: this.fromEmail,
+      to: email,
+      subject: `Order Processing Issue - Order #${failureData.orderId}`,
+      html: this._generateOrderFailedTemplate(failureData)
+    };
+
+    return this._sendEmailWithRetry(emailData, 'order_failed');
+  }
+
+  /**
+   * Generate article ready email template
+   * @private
+   */
+  _generateArticleReadyTemplate(articleData) {
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .header { background-color: #4CAF50; padding: 20px; text-align: center; color: white; }
+          .content { padding: 20px; }
+          .button { display: inline-block; padding: 12px 24px; background-color: #4CAF50; color: white; text-decoration: none; border-radius: 4px; margin: 20px 0; }
+          .footer { margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd; font-size: 12px; color: #666; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>🎉 Your Article is Ready!</h1>
+        </div>
+        
+        <div class="content">
+          <p>Great news! Your article "${articleData.topic}" has been generated and is ready for your review.</p>
+          
+          <p><strong>What's next?</strong></p>
+          <ol>
+            <li>Click the button below to review your article</li>
+            <li>Check if you're satisfied with the content and backlink placement</li>
+            <li>If you need any changes, you can request a revision</li>
+            <li>Once satisfied, submit it for final approval</li>
+          </ol>
+          
+          <p style="text-align: center;">
+            <a href="${articleData.viewUrl}" class="button">Review Your Article</a>
+          </p>
+          
+          <p><strong>Order ID:</strong> ${articleData.orderId}</p>
+          <p><strong>Article ID:</strong> ${articleData.articleId}</p>
+          
+          <p>You can request unlimited revisions until you're completely satisfied with the result.</p>
+        </div>
+        
+        <div class="footer">
+          <p>This link will remain active. You can return to review your article at any time.</p>
+          <p>This is an automated email. Please do not reply to this message.</p>
+        </div>
+      </body>
+      </html>
+    `;
+  }
+
+  /**
+   * Generate backlink integrated email template
+   * @private
+   */
+  _generateBacklinkIntegratedTemplate(backlinkData) {
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .header { background-color: #2196F3; padding: 20px; text-align: center; color: white; }
+          .content { padding: 20px; }
+          .button { display: inline-block; padding: 12px 24px; background-color: #2196F3; color: white; text-decoration: none; border-radius: 4px; margin: 20px 0; }
+          .footer { margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd; font-size: 12px; color: #666; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>✅ Your Backlink is Ready!</h1>
+        </div>
+        
+        <div class="content">
+          <p>Great news! Your backlink has been successfully integrated into the article "${backlinkData.articleSlug}".</p>
+          
+          <p><strong>What's next?</strong></p>
+          <ol>
+            <li>Click the button below to review the updated article</li>
+            <li>Check the backlink placement and integration</li>
+            <li>If you need any adjustments, request a revision</li>
+            <li>Once satisfied, submit for final approval and publishing</li>
+          </ol>
+          
+          <p style="text-align: center;">
+            <a href="${backlinkData.viewUrl}" class="button">Review Your Backlink</a>
+          </p>
+          
+          <p><strong>Order ID:</strong> ${backlinkData.orderId}</p>
+          <p><strong>Article ID:</strong> ${backlinkData.articleId}</p>
+          
+          <p>Don't worry - you can request revisions if you'd like any changes to the integration.</p>
+        </div>
+        
+        <div class="footer">
+          <p>This link will remain active. You can return to review your backlink at any time.</p>
+          <p>This is an automated email. Please do not reply to this message.</p>
+        </div>
+      </body>
+      </html>
+    `;
+  }
+
+  /**
+   * Generate revision ready email template
+   * @private
+   */
+  _generateRevisionReadyTemplate(revisionData) {
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .header { background-color: #FF9800; padding: 20px; text-align: center; color: white; }
+          .content { padding: 20px; }
+          .button { display: inline-block; padding: 12px 24px; background-color: #FF9800; color: white; text-decoration: none; border-radius: 4px; margin: 20px 0; }
+          .footer { margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd; font-size: 12px; color: #666; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>🔄 Your Revision is Ready!</h1>
+        </div>
+        
+        <div class="content">
+          <p>We've completed the revisions you requested for "${revisionData.articleSlug}".</p>
+          
+          <p><strong>What's next?</strong></p>
+          <ol>
+            <li>Click the button below to review the updated version</li>
+            <li>Check if your requested changes have been implemented</li>
+            <li>Request another revision if needed (unlimited revisions available)</li>
+            <li>Once satisfied, submit for final approval</li>
+          </ol>
+          
+          <p style="text-align: center;">
+            <a href="${revisionData.viewUrl}" class="button">Review Revision</a>
+          </p>
+          
+          <p><strong>Order ID:</strong> ${revisionData.orderId}</p>
+          <p><strong>Article ID:</strong> ${revisionData.articleId}</p>
+          
+          <p>We've carefully implemented your feedback. Take your time reviewing - you can always request more changes!</p>
+        </div>
+        
+        <div class="footer">
+          <p>This link will remain active. You can return to review your revision at any time.</p>
+          <p>This is an automated email. Please do not reply to this message.</p>
+        </div>
+      </body>
+      </html>
+    `;
+  }
+
+  /**
+   * Generate order failed email template
+   * @private
+   */
+  _generateOrderFailedTemplate(failureData) {
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .header { background-color: #f44336; padding: 20px; text-align: center; color: white; }
+          .content { padding: 20px; }
+          .error-box { background-color: #ffebee; border-left: 4px solid #f44336; padding: 15px; margin: 20px 0; }
+          .footer { margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd; font-size: 12px; color: #666; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>⚠️ Order Processing Issue</h1>
+        </div>
+        
+        <div class="content">
+          <p>We encountered an issue while processing your order and our system was unable to complete it automatically.</p>
+          
+          <div class="error-box">
+            <p><strong>Order ID:</strong> ${failureData.orderId}</p>
+            <p><strong>Issue:</strong> ${failureData.error}</p>
+          </div>
+          
+          <p><strong>What's happening now?</strong></p>
+          <p>Our team has been notified and will review your order manually. We'll work to resolve this as quickly as possible.</p>
+          
+          <p><strong>What should you do?</strong></p>
+          <ul>
+            <li>No action needed - we'll handle this for you</li>
+            <li>You'll receive an email update within 24 hours</li>
+            <li>If we can't complete your order, you'll receive a full refund</li>
+          </ul>
+          
+          <p>We apologize for any inconvenience and appreciate your patience.</p>
+        </div>
+        
+        <div class="footer">
+          <p>If you have urgent questions, please contact support and reference order ID: ${failureData.orderId}</p>
+          <p>This is an automated email. Please do not reply to this message.</p>
+        </div>
+      </body>
+      </html>
+    `;
+  }
 }
 
 module.exports = EmailService;

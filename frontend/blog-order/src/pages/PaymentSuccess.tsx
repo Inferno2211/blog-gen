@@ -35,36 +35,9 @@ export default function PaymentSuccess() {
 
       if (response.success && response.data.orderId) {
         setOrderId(response.data.orderId);
-        // Automatically redirect to appropriate configuration after 3 seconds
-        setTimeout(async () => {
-          try {
-            const orderData = await getOrderDetails(response.data.orderId);
-            console.log("Order data for redirect:", orderData); // Debug log
-            const isArticleGeneration =
-              orderData.order?.backlinkData?.type === "ARTICLE_GENERATION";
-            console.log(
-              "Is article generation?",
-              isArticleGeneration,
-              orderData.order?.backlinkData
-            ); // Debug log
-
-            if (isArticleGeneration) {
-              console.log("Redirecting to article configuration"); // Debug log
-              navigate(`/configure-article?order_id=${response.data.orderId}`);
-            } else {
-              console.log("Redirecting to backlink configuration"); // Debug log
-              const sessionId = searchParams.get("session_id");
-              navigate(
-                `/configure-backlink?session_id=${sessionId}&order_id=${response.data.orderId}`
-              );
-            }
-          } catch (error) {
-            console.error("Failed to get order type for redirect:", error);
-            console.error("Error details:", error.message, error.stack);
-            // Better fallback - try to determine from URL or default to home
-            console.log("Falling back to home page due to error");
-            navigate("/");
-          }
+        // Redirect to order status page where customer can see progress
+        setTimeout(() => {
+          navigate(`/order-status?order_id=${response.data.orderId}`);
         }, 3000);
       } else {
         setError("Failed to complete order");
@@ -102,7 +75,10 @@ export default function PaymentSuccess() {
         }
       } catch (error) {
         console.error("Failed to get order type:", error);
-        console.error("Manual continue error details:", error.message);
+        console.error(
+          "Manual continue error details:",
+          error instanceof Error ? error.message : String(error)
+        );
         // Better fallback - go to home instead of potentially broken backlink page
         navigate("/");
       }

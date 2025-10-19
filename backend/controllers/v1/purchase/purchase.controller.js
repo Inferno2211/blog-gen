@@ -2,6 +2,7 @@ const PurchaseService = require('../../../services/PurchaseService');
 const SessionService = require('../../../services/SessionService');
 const EmailService = require('../../../services/EmailService');
 const StripeService = require('../../../services/StripeService');
+const QueueService = require('../../../services/queue/QueueService');
 const { ValidationError, NotFoundError, ConflictError } = require('../../../services/errors');
 const prisma = require('../../../db/prisma');
 
@@ -15,6 +16,7 @@ class PurchaseController {
         this.sessionService = new SessionService();
         this.emailService = new EmailService();
         this.stripeService = new StripeService();
+        this.queueService = new QueueService();
     }
 
     /**
@@ -255,7 +257,7 @@ class PurchaseController {
 
     /**
      * GET /api/v1/purchase/status/:orderId
-     * Get order status and progress information
+     * Get order status and progress information (with queue status)
      */
     async getOrderStatus(req, res, next) {
         try {
@@ -265,29 +267,107 @@ class PurchaseController {
                 throw new ValidationError('Order ID is required');
             }
 
-            // For testing purposes, return a mock response for any order ID
-            // In production, this would call the actual service
+            // Get order details
+            const order = await prisma.order.findUnique({
+                where: { id: orderId },
+                include: {
+                    article: {
+                        include: {
+                            domain: true
+                        }
+                    },
+                    version: true,
+                    session: true
+                }
+            });
+
+            if (!order) {
+                throw new NotFoundError('Order not found');
+            }
+
+            // Get queue status for this order
+            const queueStatus = await this.queueService.getOrderJobStatus(orderId);
+
+            // Determine overall status message
+            let statusMessage = 'Unknown status';
+            let progress = { step: 1, total: 5, description: 'Initializing...' };
+
+            switch (order.status) {
+                case 'PROCESSING':
+                    statusMessage = 'Processing your request';
+                    progress = { 
+                        step: 2, 
+                        total: 5, 
+                        description: queueStatus.hasActiveJob 
+                            ? 'AI is generating your content...' 
+                            : 'Request queued, processing will begin shortly...'
+                    };
+                    break;
+                case 'QUALITY_CHECK':
+                    statusMessage = 'Content ready for review';
+                    progress = { 
+                        step: 3, 
+                        total: 5, 
+                        description: 'Your content is ready! Please review and request revisions if needed.'
+                    };
+                    break;
+                case 'ADMIN_REVIEW':
+                    statusMessage = 'Submitted for final approval';
+                    progress = { 
+                        step: 4, 
+                        total: 5, 
+                        description: 'Our team is reviewing your content for final approval...'
+                    };
+                    break;
+                case 'COMPLETED':
+                    statusMessage = 'Order completed';
+                    progress = { 
+                        step: 5, 
+                        total: 5, 
+                        description: 'Your article has been published!'
+                    };
+                    break;
+                case 'FAILED':
+                    statusMessage = 'Order processing failed';
+                    progress = { 
+                        step: 0, 
+                        total: 5, 
+                        description: 'An error occurred. Please contact support.'
+                    };
+                    break;
+            }
+
             res.status(200).json({
                 success: true,
                 message: 'Order status retrieved successfully',
                 data: {
-                    status: 'PROCESSING',
-                    progress: { 
-                        step: 1, 
-                        total: 4, 
-                        description: 'Processing payment and initiating backlink integration' 
-                    },
-                    estimatedCompletion: new Date(Date.now() + 2 * 60 * 60 * 1000), // 2 hours from now
+                    status: order.status,
+                    statusMessage,
+                    progress,
                     orderDetails: {
-                        orderId: orderId,
-                        articleTitle: 'Sample Article',
-                        backlinkData: { 
-                            keyword: 'sample keyword', 
-                            target_url: 'https://example.com' 
-                        },
-                        createdAt: new Date(),
-                        completedAt: null
-                    }
+                        orderId: order.id,
+                        articleId: order.article_id,
+                        articleSlug: order.article?.slug,
+                        domainName: order.article?.domain?.name,
+                        backlinkData: order.backlink_data,
+                        createdAt: order.created_at,
+                        completedAt: order.completed_at,
+                        customerEmail: order.customer_email
+                    },
+                    version: order.version ? {
+                        versionId: order.version_id,
+                        versionNum: order.version.version_num,
+                        content: order.version.content_md,
+                        qcStatus: order.version.last_qc_status,
+                        backlinkReviewStatus: order.version.backlink_review_status
+                    } : null,
+                    queue: {
+                        hasActiveJob: queueStatus.hasActiveJob,
+                        hasFailedJob: queueStatus.hasFailedJob,
+                        jobs: queueStatus.jobs
+                    },
+                    canRequestRevision: order.status === 'QUALITY_CHECK' && order.version_id,
+                    canSubmitForReview: order.status === 'QUALITY_CHECK' && order.version_id
                 }
             });
 
@@ -676,6 +756,98 @@ class PurchaseController {
     }
 
     /**
+     * POST /api/v1/purchase/regenerate-backlink
+     * Regenerate backlink integration using the PUBLISHED article as base
+     * Customer cannot modify the article - only regenerate the AI integration
+     */
+    async regenerateBacklink(req, res, next) {
+        try {
+            const { orderId } = req.body;
+
+            // Validate required fields
+            if (!orderId) {
+                throw new ValidationError('Order ID is required');
+            }
+
+            // Get order to check status and get details
+            const order = await prisma.order.findUnique({
+                where: { id: orderId },
+                include: { 
+                    article: true,
+                    version: true 
+                }
+            });
+
+            if (!order) {
+                throw new NotFoundError('Order not found');
+            }
+
+            if (order.status !== 'QUALITY_CHECK') {
+                throw new ValidationError('Can only regenerate when order is in QUALITY_CHECK status');
+            }
+
+            // Extract backlink data from order
+            const backlinkData = order.backlink_data;
+            
+            // Add regeneration job to queue
+            // This will ALWAYS use the PUBLISHED article as the base, not the customer's previous version
+            const job = await this.queueService.addBacklinkIntegrationJob({
+                orderId: order.id,
+                articleId: order.article_id,
+                targetUrl: backlinkData.target_url,
+                anchorText: backlinkData.keyword,
+                notes: backlinkData.notes,
+                email: order.customer_email,
+                isRegeneration: true // Flag to indicate this is a regeneration
+            });
+
+            // Update order status back to PROCESSING
+            await prisma.order.update({
+                where: { id: orderId },
+                data: { 
+                    status: 'PROCESSING',
+                    updated_at: new Date()
+                }
+            });
+
+            res.status(200).json({
+                success: true,
+                message: 'Regeneration request submitted successfully. The backlink will be re-integrated into the published article. You will receive an email when ready.',
+                data: {
+                    orderId: order.id,
+                    jobId: job.id,
+                    estimatedTime: '10-30 minutes',
+                    note: 'The AI will re-integrate your backlink into the current published version of the article.'
+                }
+            });
+
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    /**
+     * POST /api/v1/purchase/request-revision
+     * DEPRECATED: Use regenerateBacklink instead
+     * Kept for backwards compatibility
+     */
+    async requestRevision(req, res, next) {
+        try {
+            const { orderId } = req.body;
+
+            if (!orderId) {
+                throw new ValidationError('Order ID is required');
+            }
+
+            // Redirect to regenerateBacklink
+            return this.regenerateBacklink(req, res, next);
+
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    /**
      * POST /api/v1/purchase/submit-for-review
      * Submit customer backlink for admin review
      */
@@ -817,6 +989,11 @@ module.exports = {
     async regenerateArticle(req, res, next) {
         const controller = new PurchaseController();
         return controller.regenerateArticle(req, res, next);
+    },
+
+    async requestRevision(req, res, next) {
+        const controller = new PurchaseController();
+        return controller.requestRevision(req, res, next);
     },
 
     async submitForReview(req, res, next) {

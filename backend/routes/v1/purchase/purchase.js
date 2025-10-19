@@ -18,6 +18,9 @@ router.post('/regenerate-backlink', purchaseController.regenerateBacklink);
 router.post('/configure-article', purchaseController.configureArticle);
 router.post('/regenerate-article', purchaseController.regenerateArticle);
 
+// Revision request endpoint
+router.post('/request-revision', purchaseController.requestRevision);
+
 // Submit for review (works for both backlinks and articles)
 router.post('/submit-for-review', purchaseController.submitForReview);
 

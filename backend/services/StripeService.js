@@ -1,6 +1,7 @@
 const Stripe = require('stripe');
 const { PrismaClient } = require('@prisma/client');
 const { AppError } = require('./errors');
+const QueueService = require('./queue/QueueService');
 
 class StripeService {
   constructor() {
@@ -11,6 +12,7 @@ class StripeService {
     this.stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
     this.prisma = new PrismaClient();
     this.webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+    this.queueService = new QueueService();
     
     // Pricing: $15.00 USD for backlinks, $25.00 USD for article generation
     this.BACKLINK_PRICE = 1500; // in cents
@@ -147,6 +149,29 @@ class StripeService {
 
       const purchaseSessionId = session.metadata.purchase_session_id;
       
+      // Check if order already exists (idempotency check)
+      const existingOrder = await this.prisma.order.findFirst({
+        where: {
+          session_id: purchaseSessionId,
+          payment_data: {
+            path: ['stripe_session_id'],
+            equals: stripeSessionId
+          }
+        }
+      });
+
+      if (existingOrder) {
+        console.log(`Order already exists for session ${purchaseSessionId}, skipping duplicate processing`);
+        return {
+          orderId: existingOrder.id,
+          sessionId: purchaseSessionId,
+          amount: session.amount_total,
+          currency: session.currency,
+          status: existingOrder.status,
+          duplicate: true
+        };
+      }
+      
       // Update purchase session status
       const updatedSession = await this.prisma.purchaseSession.update({
         where: { id: purchaseSessionId },
@@ -210,6 +235,34 @@ class StripeService {
           status: 'PROCESSING'
         }
       });
+
+      // Add job to queue based on order type
+      if (isArticleGeneration) {
+        // Add article generation job to queue
+        await this.queueService.addArticleGenerationJob({
+          orderId: order.id,
+          articleId: articleId,
+          domainId: purchaseSession.article.domain_id,
+          topic: backlinkData.articleTitle,
+          niche: backlinkData.niche || '',
+          keyword: backlinkData.keyword || '',
+          targetUrl: backlinkData.target_url || '',
+          anchorText: backlinkData.keyword || '',
+          email: order.customer_email
+        });
+        console.log(`Article generation job added to queue for order ${order.id}`);
+      } else {
+        // Add backlink integration job to queue
+        await this.queueService.addBacklinkIntegrationJob({
+          orderId: order.id,
+          articleId: articleId,
+          targetUrl: backlinkData.target_url,
+          anchorText: backlinkData.keyword,
+          notes: backlinkData.notes,
+          email: order.customer_email
+        });
+        console.log(`Backlink integration job added to queue for order ${order.id}`);
+      }
 
       return {
         orderId: order.id,

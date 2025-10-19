@@ -5,6 +5,7 @@ import type {
   SessionVerifyResponse,
   PurchaseCompleteResponse,
   OrderStatusResponse,
+  BackendOrderStatusResponse,
   ArticleAvailability,
 } from "../types/purchase";
 import type { Domain } from "../types/domain";
@@ -143,8 +144,14 @@ export async function completePurchase(
 // Get order status (public endpoint)
 export async function getOrderStatus(
   orderId: string
-): Promise<OrderStatusResponse> {
-  const res = await fetch(`${API_BASE}/purchase/status/${orderId}`);
+): Promise<BackendOrderStatusResponse> {
+  // Use no-cache to avoid connection reuse issues
+  const res = await fetch(`${API_BASE}/purchase/status/${orderId}`, {
+    headers: {
+      "Cache-Control": "no-cache",
+      Connection: "close",
+    },
+  });
   if (!res.ok) throw new Error("Failed to get order status");
   return res.json();
 }
@@ -412,6 +419,28 @@ export async function customerSubmitForReview(data: {
   if (!res.ok) {
     const errorData = await res.json();
     throw new Error(errorData.message || "Failed to submit for review");
+  }
+
+  return res.json();
+}
+
+// Regenerate backlink integration (customer can regenerate unlimited times)
+export async function regenerateBacklink(orderId: string): Promise<{
+  success: boolean;
+  message: string;
+  versionId?: string;
+}> {
+  const res = await fetch(`${API_BASE}/purchase/regenerate-backlink`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ orderId }),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json();
+    throw new Error(errorData.message || "Failed to regenerate backlink");
   }
 
   return res.json();

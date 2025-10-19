@@ -58,44 +58,68 @@ function countExternalLinks(markdown) {
 
 /** Helper: check specific backlink exists (anchor + URL) */
 function hasSpecificBacklink(markdown, targetUrl, anchorText) {
-    if (!targetUrl || !anchorText) return false;
-    const escapedUrl = targetUrl.replace(/[.*+?^${}()|[\]\\:]/g, '\\$&');
-    const escapedAnchor = anchorText.replace(/[.*+?^${}()|[\]\\:]/g, '\\$&');
-    try {
-        const regex = new RegExp(`\\[([^\\]]*${escapedAnchor}[^\\]]*)\\]\\(${escapedUrl}\\)`, 'i');
-        return regex.test(markdown);
-    } catch (error) {
-        console.warn('Invalid regex for backlink check:', { targetUrl, anchorText }, error.message);
-        // Fallback to simple string search
-        return markdown.includes(`[${anchorText}](${targetUrl})`) || markdown.includes(`](${targetUrl})`);
+    if (!markdown || !targetUrl || !anchorText) return false;
+
+    // Parse markdown links
+    const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/gi;
+    const normTarget = targetUrl.endsWith('/') ? targetUrl.slice(0, -1) : targetUrl;
+
+    for (const m of markdown.matchAll(linkRegex)) {
+        const linkText = (m[1] || '').trim();
+        let url = (m[2] || '').trim();
+        // normalize
+        if (url.endsWith('/')) url = url.slice(0, -1);
+
+        // Check URL equality (exact or without trailing slash)
+        if (url === normTarget || url === targetUrl) {
+            // Check anchor text is present within the link text (case-insensitive)
+            if (linkText.toLowerCase().includes(anchorText.toLowerCase())) return true;
+        }
     }
+
+    // Fallback checks: direct substring matches (less reliable)
+    if (markdown.includes(`[${anchorText}](${targetUrl})`) || markdown.includes(`](${targetUrl})`)) return true;
+
+    return false;
 }
 
 /** Helper: count internal links to /posts/... */
 function countInternalLinks(markdown) {
-    const regex = /\[[^\]]+\]\((\/posts\/[\w-]+\/?)\)/gi;
+    if (!markdown) return 0;
+    const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/gi;
     let count = 0;
-    while (regex.exec(markdown)) count++;
+    const matches = markdown.matchAll(linkRegex);
+    for (const m of matches) {
+        const url = (m[2] || '').trim();
+        if (url.startsWith('/posts/')) count++;
+    }
     return count;
 }
 
 /** Helper: whether any internal link is to expected candidates */
 function hasInternalLinkToCandidates(markdown, candidates = []) {
     if (!Array.isArray(candidates) || candidates.length === 0) return false;
-    return candidates.some((c) => {
-        const url = c?.url || '';
-        if (!url) return false;
-        // More robust escaping for URLs that might contain special regex characters
-        const escapedUrl = url.replace(/[.*+?^${}()|[\]\\:]/g, '\\$&');
-        try {
-            const regex = new RegExp(`\\]\(${escapedUrl}\\)`, 'i');
-            return regex.test(markdown);
-        } catch (error) {
-            console.warn('Invalid regex for URL:', url, error.message);
-            // Fallback to simple string search
-            return markdown.includes(`](${url})`);
-        }
-    });
+    if (!markdown) return false;
+
+    // Parse all markdown links once and normalize URLs
+    const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/gi;
+    const foundUrls = new Set();
+    for (const m of markdown.matchAll(linkRegex)) {
+        let url = (m[2] || '').trim();
+        // normalize by removing trailing slash for comparison
+        if (url.endsWith('/')) url = url.slice(0, -1);
+        foundUrls.add(url);
+    }
+
+    // Normalize candidate urls and check membership
+    for (const c of candidates) {
+        const url = (c?.url || '').trim();
+        if (!url) continue;
+        const norm = url.endsWith('/') ? url.slice(0, -1) : url;
+        if (foundUrls.has(norm)) return true;
+    }
+
+    return false;
 }
 
 /**
@@ -193,7 +217,33 @@ async function performQC(articleId, content, maxRetries = 3, options = {}) {
             if (internalCount > 0) hardChecksPass = false;
         }
 
+        // Detailed hard-check logging to aid debugging
+        const hardCheckDetails = {
+            externalLinks: null,
+            backlinkRequired: null,
+            backlinkPresent: null,
+            internalCount: null,
+            internalToCandidates: null
+        };
+
+        if (options.noExternalBacklinks) {
+            const externalCount = countExternalLinks(lastContent);
+            hardCheckDetails.externalLinks = externalCount;
+        } else {
+            if (backlinkUrl && anchorText) {
+                hardCheckDetails.backlinkRequired = true;
+                hardCheckDetails.backlinkPresent = hasSpecificBacklink(lastContent, backlinkUrl, anchorText);
+            } else {
+                hardCheckDetails.backlinkRequired = false;
+            }
+        }
+
+        const internalCount = countInternalLinks(lastContent);
+        hardCheckDetails.internalCount = internalCount;
+        hardCheckDetails.internalToCandidates = hasInternalLinkToCandidates(lastContent, options.internalLinkCandidates || []);
+
         console.log('Hard checks pass: ', hardChecksPass);
+        console.log('Hard check details: ', JSON.stringify(hardCheckDetails, null, 2));
         console.log('Last QC result: ', lastQCResult);
         const qcPass = lastQCResult && (lastQCResult.status === 'pass');
         if (qcPass && hardChecksPass) {

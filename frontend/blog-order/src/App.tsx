@@ -21,6 +21,7 @@ import PaymentSuccess from "./pages/PaymentSuccess";
 import CustomerBacklinkConfiguration from "./pages/CustomerBacklinkConfiguration";
 import CustomerArticleConfiguration from "./pages/CustomerArticleConfiguration";
 import ReviewSubmitted from "./pages/ReviewSubmitted";
+import OrderStatus from "./pages/OrderStatus";
 import { isAuthenticated } from "./services/authService";
 
 function App() {
@@ -32,6 +33,7 @@ function App() {
         <Route path="/request-article" element={<RequestArticle />} />
         <Route path="/verify" element={<VerifySession />} />
         <Route path="/payment/success" element={<PaymentSuccess />} />
+        <Route path="/order-status" element={<OrderStatus />} />
         <Route
           path="/configure-backlink"
           element={<CustomerBacklinkConfiguration />}
