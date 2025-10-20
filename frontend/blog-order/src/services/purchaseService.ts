@@ -218,6 +218,8 @@ export async function initiateArticlePurchase(request: {
   topic: string;
   niche?: string;
   keyword?: string;
+  targetUrl?: string; // Optional backlink
+  anchorText?: string; // Optional backlink anchor text
   email: string;
   notes?: string;
 }): Promise<PurchaseInitiateResponse> {

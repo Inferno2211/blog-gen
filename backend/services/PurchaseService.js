@@ -68,7 +68,7 @@ class PurchaseService {
      * @returns {Promise<{orderId: string, paymentUrl: string, sessionToken: string}>}
      */
     async initializeArticlePurchase(articleData) {
-        const { domainId, articleTitle, topic, niche, keyword, email, notes, price } = articleData;
+        const { domainId, articleTitle, topic, niche, keyword, targetUrl, anchorText, email, notes, price } = articleData;
 
         // Validate inputs
         if (!domainId || !articleTitle || !topic || !email) {
@@ -98,6 +98,8 @@ class PurchaseService {
                     topic: articleTitle, // Use articleTitle as the topic
                     niche: niche || '',
                     keyword: keyword || '',
+                    backlink_target: targetUrl || null, // Optional backlink
+                    anchor: anchorText || null, // Optional anchor text
                     domain_id: domainId,
                     status: 'DRAFT',
                     availability_status: 'PROCESSING'
@@ -118,6 +120,8 @@ class PurchaseService {
                         topic,
                         niche,
                         keyword,
+                        targetUrl: targetUrl || null, // Include optional backlink
+                        anchorText: anchorText || null, // Include optional anchor text
                         notes: notes || ''
                     },
                     status: 'PENDING_AUTH',
@@ -141,12 +145,9 @@ class PurchaseService {
 
             console.log(`Article purchase initiated for ${email}, session: ${session.id}, article: ${article.id}`);
 
-            const magicLinkUrl = `${process.env.FRONTEND_BASE_URL || 'http://localhost:5173'}/verify?token=${magicLinkToken}`;
-            
             return {
-                orderId: session.id,
-                paymentUrl: magicLinkUrl, // User gets magic link first, then payment after verification
-                sessionToken: magicLinkToken
+                sessionId: session.id,
+                magicLinkSent: true
             };
 
         } catch (error) {

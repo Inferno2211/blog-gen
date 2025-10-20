@@ -773,8 +773,11 @@ class PurchaseController {
             const order = await prisma.order.findUnique({
                 where: { id: orderId },
                 include: { 
-                    article: true,
-                    version: true 
+                    article: {
+                        include: { domain: true }
+                    },
+                    version: true,
+                    session: true
                 }
             });
 
@@ -786,20 +789,41 @@ class PurchaseController {
                 throw new ValidationError('Can only regenerate when order is in QUALITY_CHECK status');
             }
 
-            // Extract backlink data from order
+            // Determine order type
+            const isArticleGeneration = order.session?.backlink_data?.type === 'ARTICLE_GENERATION';
             const backlinkData = order.backlink_data;
             
-            // Add regeneration job to queue
-            // This will ALWAYS use the PUBLISHED article as the base, not the customer's previous version
-            const job = await this.queueService.addBacklinkIntegrationJob({
-                orderId: order.id,
-                articleId: order.article_id,
-                targetUrl: backlinkData.target_url,
-                anchorText: backlinkData.keyword,
-                notes: backlinkData.notes,
-                email: order.customer_email,
-                isRegeneration: true // Flag to indicate this is a regeneration
-            });
+            let job;
+            let message;
+            
+            if (isArticleGeneration) {
+                // Article generation regeneration - regenerate the entire article
+                job = await this.queueService.addArticleGenerationJob({
+                    orderId: order.id,
+                    articleId: order.article_id,
+                    domainId: order.article.domain_id,
+                    topic: backlinkData.topic || backlinkData.articleTitle,
+                    niche: backlinkData.niche || '',
+                    keyword: backlinkData.keyword || '',
+                    targetUrl: backlinkData.target_url || '',
+                    anchorText: backlinkData.keyword || '',
+                    email: order.customer_email,
+                    isRegeneration: true
+                });
+                message = 'Article regeneration request submitted successfully. You will receive an email when ready.';
+            } else {
+                // Backlink integration regeneration - re-integrate backlink into published article
+                job = await this.queueService.addBacklinkIntegrationJob({
+                    orderId: order.id,
+                    articleId: order.article_id,
+                    targetUrl: backlinkData.target_url,
+                    anchorText: backlinkData.keyword,
+                    notes: backlinkData.notes,
+                    email: order.customer_email,
+                    isRegeneration: true
+                });
+                message = 'Backlink regeneration request submitted successfully. The backlink will be re-integrated into the published article. You will receive an email when ready.';
+            }
 
             // Update order status back to PROCESSING
             await prisma.order.update({
@@ -812,12 +836,12 @@ class PurchaseController {
 
             res.status(200).json({
                 success: true,
-                message: 'Regeneration request submitted successfully. The backlink will be re-integrated into the published article. You will receive an email when ready.',
+                message,
                 data: {
                     orderId: order.id,
                     jobId: job.id,
                     estimatedTime: '10-30 minutes',
-                    note: 'The AI will re-integrate your backlink into the current published version of the article.'
+                    orderType: isArticleGeneration ? 'article_generation' : 'backlink_integration'
                 }
             });
 
@@ -886,7 +910,7 @@ class PurchaseController {
      */
     async initiateArticlePurchase(req, res, next) {
         try {
-            const { domainId, articleTitle, topic, niche, keyword, email, notes, type } = req.body;
+            const { domainId, articleTitle, topic, niche, keyword, targetUrl, anchorText, email, notes, type } = req.body;
 
             // Validate required fields
             if (!domainId) {
@@ -908,6 +932,20 @@ class PurchaseController {
                 throw new ValidationError('Invalid email format');
             }
 
+            // Validate backlink fields if provided (both must be present together)
+            if ((targetUrl && !anchorText) || (!targetUrl && anchorText)) {
+                throw new ValidationError('Both targetUrl and anchorText are required when including a backlink');
+            }
+
+            if (targetUrl) {
+                // URL validation
+                try {
+                    new URL(targetUrl);
+                } catch (e) {
+                    throw new ValidationError('Invalid target URL format');
+                }
+            }
+
             // Create article purchase order
             const result = await this.purchaseService.initializeArticlePurchase({
                 domainId,
@@ -915,17 +953,16 @@ class PurchaseController {
                 topic,
                 niche: niche || '',
                 keyword: keyword || '',
+                targetUrl: targetUrl || null,
+                anchorText: anchorText || null,
                 email,
                 notes: notes || '',
                 price: 25.00 // Fixed price for article generation
             });
 
             res.status(200).json({
-                success: true,
-                message: 'Article purchase initiated successfully. Check your email for the magic link.',
-                orderId: result.orderId,
-                paymentUrl: result.paymentUrl,
-                sessionToken: result.sessionToken
+                sessionId: result.sessionId,
+                magicLinkSent: result.magicLinkSent
             });
 
         } catch (error) {

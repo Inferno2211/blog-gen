@@ -8,7 +8,7 @@ const EmailService = require('../../EmailService');
  * Handles jobs for generating new articles from scratch
  */
 async function processArticleGeneration(job) {
-    const { orderId, articleId, domainId, topic, niche, keyword, targetUrl, anchorText, email } = job.data;
+    const { orderId, articleId, domainId, topic, niche, keyword, targetUrl, anchorText, email, isRegeneration = false } = job.data;
 
     console.log('╔═══════════════════════════════════════════════════════════════');
     console.log('║ 🚀 ARTICLE GENERATION JOB STARTED');
@@ -23,6 +23,7 @@ async function processArticleGeneration(job) {
     console.log(`║ Target URL: ${targetUrl}`);
     console.log(`║ Anchor Text: ${anchorText}`);
     console.log(`║ Email: ${email}`);
+    console.log(`║ Is Regeneration: ${isRegeneration}`);
     console.log('╚═══════════════════════════════════════════════════════════════\n');
 
     try {
@@ -102,12 +103,23 @@ async function processArticleGeneration(job) {
         // Send email notification to customer
         console.log('📧 Sending email notification to customer...');
         const emailService = new EmailService();
-        await emailService.sendArticleReadyEmail(email, {
-            orderId,
-            articleId,
-            topic,
-            viewUrl: `${process.env.FRONTEND_URL}/order-status?order_id=${orderId}`
-        });
+        
+        if (isRegeneration) {
+            // For regenerations, use revision ready email
+            await emailService.sendRevisionReadyEmail(email, {
+                orderId,
+                articleId,
+                viewUrl: `${process.env.FRONTEND_URL}/order-status?order_id=${orderId}`
+            });
+        } else {
+            // For initial generation, use article ready email
+            await emailService.sendArticleReadyEmail(email, {
+                orderId,
+                articleId,
+                topic,
+                viewUrl: `${process.env.FRONTEND_URL}/order-status?order_id=${orderId}`
+            });
+        }
         console.log('✅ Email sent successfully\n');
 
         job.progress(100);

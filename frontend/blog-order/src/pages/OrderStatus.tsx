@@ -4,6 +4,8 @@ import {
   getOrderStatus,
   regenerateBacklink,
   customerSubmitForReview,
+  customerRegenerateArticle,
+  customerSubmitArticleForReview,
 } from "../services/purchaseService";
 import type { OrderStatusResponse } from "../types/purchase";
 import LoadingSpinner from "../components/LoadingSpinner";
@@ -151,7 +153,7 @@ export default function OrderStatus() {
     };
   }, [orderId]);
 
-  // Handle regenerate backlink
+  // Handle regenerate (works for both article generation and backlink integration)
   const handleRegenerate = async () => {
     if (!orderId) return;
 
@@ -159,12 +161,16 @@ export default function OrderStatus() {
     setError("");
 
     try {
+      // The backend regenerateBacklink endpoint handles both article and backlink orders
+      // It uses the queue system and sends email notifications on completion
       await regenerateBacklink(orderId);
-      // Immediately fetch updated status - the useEffect polling will continue automatically
+
+      // Immediately fetch updated status - order should now be in PROCESSING
+      // The useEffect polling will continue until status changes to QUALITY_CHECK
       await fetchOrderStatus();
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Failed to regenerate backlink"
+        err instanceof Error ? err.message : "Failed to regenerate content"
       );
     } finally {
       setRegenerating(false);
@@ -179,10 +185,24 @@ export default function OrderStatus() {
     setError("");
 
     try {
-      await customerSubmitForReview({
-        orderId,
-        versionId: orderData.order.version_id,
-      });
+      const isArticleOrder = (() => {
+        const bd = order?.backlink_data as any;
+        if (!bd || typeof bd !== "object") return false;
+        if (!bd.type) return false;
+        return String(bd.type).toUpperCase() === "ARTICLE_GENERATION";
+      })();
+
+      if (isArticleOrder) {
+        await customerSubmitArticleForReview({
+          orderId,
+          versionId: orderData.order.version_id,
+        });
+      } else {
+        await customerSubmitForReview({
+          orderId,
+          versionId: orderData.order.version_id,
+        });
+      }
       navigate("/review-submitted");
     } catch (err) {
       setError(
@@ -413,7 +433,14 @@ export default function OrderStatus() {
                     Regenerating...
                   </span>
                 ) : (
-                  "🔄 Regenerate Backlink Integration"
+                  (() => {
+                    const bd = order?.backlink_data as any;
+                    const isArticleOrder =
+                      bd?.type?.toUpperCase() === "ARTICLE_GENERATION";
+                    return isArticleOrder
+                      ? "🔄 Regenerate Article"
+                      : "🔄 Regenerate Backlink Integration";
+                  })()
                 )}
               </button>
 
