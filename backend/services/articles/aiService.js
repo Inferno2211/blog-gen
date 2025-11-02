@@ -63,7 +63,7 @@ async function generateMarkdown({ niche, keyword, topic, n, targetURL, anchorTex
 
     while (attempt < maxRetries) {
         try {
-            return await callAI(prompt, { provider, modelName: model });
+            return await callAI(prompt, { provider, modelName: model, maxRetries: 3 });
         } catch (err) {
             lastError = err;
             attempt++;
@@ -102,7 +102,7 @@ async function runQC(articleText, { backlinkUrl, anchorText, model = 'gemini-2.5
 
     while (attempt < maxRetries) {
         try {
-            const result = await callAI(prompt, { provider, modelName: model });
+            const result = await callAI(prompt, { provider, modelName: model, maxRetries: 3 });
             return JSON.parse(result);
         } catch (err) {
             // console.error('JSON Parse Error:', err.message);
@@ -140,7 +140,7 @@ async function inferArticleDetails({ userPrompt, articleText, model = 'gemini-2.
         Input:
         ${userPrompt || articleText}`;
 
-    const result = await callAI(extractionPrompt, { provider, modelName: model });
+    const result = await callAI(extractionPrompt, { provider, modelName: model, maxRetries: 3 });
     try {
         return JSON.parse(result);
     } catch (e) {

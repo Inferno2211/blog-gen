@@ -55,14 +55,14 @@ function sanitizeResponse(response) {
 /**
  * Central AI call dispatcher.
  * @param {string|object} content - The prompt or content to send.
- * @param {Object} options - { provider: 'gemini'|'vllm', modelName: string }
+ * @param {Object} options - { provider: 'gemini'|'vllm', modelName: string, maxRetries: number }
  * @returns {Promise<string>} - The generated text/content from the selected AI.
  */
-async function callAI(content, { provider = 'gemini', modelName } = {}) {
+async function callAI(content, { provider = 'gemini', modelName, maxRetries = 3 } = {}) {
     let response;
     switch (provider) {
         case 'gemini':
-            response = await callGemini(content, modelName);
+            response = await callGemini(content, modelName, maxRetries);
             break;
         case 'vllm':
             response = await callVllm(content, modelName);

@@ -5,8 +5,10 @@ import type {
   SessionVerifyResponse,
   PurchaseCompleteResponse,
   OrderStatusResponse,
+  BackendOrderStatusResponse,
   ArticleAvailability,
 } from "../types/purchase";
+import type { Domain } from "../types/domain";
 import { mockArticles, mockArticleAvailability } from "../utils/mockData";
 
 const API_BASE = `http://localhost:5000/api/v1`;
@@ -110,12 +112,16 @@ export async function verifySession(
     throw new Error(data.message || "Failed to verify session");
   }
 
-  // Backend returns { success: true, data: { valid: true, stripeCheckoutUrl: "...", ... } }
+  // Backend returns { success: true, data: { valid: true, stripeCheckoutUrl: "...", alreadyPaid: true, orderId: "...", orderType: "...", ... } }
   // We need to return the data portion with the correct structure
   return {
     valid: data.data?.valid || false,
     stripeCheckoutUrl: data.data?.stripeCheckoutUrl,
     sessionData: data.data?.sessionData,
+    alreadyPaid: data.data?.alreadyPaid,
+    orderId: data.data?.orderId,
+    orderType: data.data?.orderType,
+    error: data.message,
   };
 }
 
@@ -138,8 +144,14 @@ export async function completePurchase(
 // Get order status (public endpoint)
 export async function getOrderStatus(
   orderId: string
-): Promise<OrderStatusResponse> {
-  const res = await fetch(`${API_BASE}/purchase/status/${orderId}`);
+): Promise<BackendOrderStatusResponse> {
+  // Use no-cache to avoid connection reuse issues
+  const res = await fetch(`${API_BASE}/purchase/status/${orderId}`, {
+    headers: {
+      "Cache-Control": "no-cache",
+      Connection: "close",
+    },
+  });
   if (!res.ok) throw new Error("Failed to get order status");
   return res.json();
 }
@@ -189,4 +201,249 @@ This article is currently being processed. Please check back later for the full 
 
 **Note:** This is a preview placeholder. The actual article content will be available once processing is complete.`;
   }
+}
+
+// Get all available domains for article requests (public endpoint)
+export async function getBrowseDomains(): Promise<Domain[]> {
+  const res = await fetch(`${API_BASE}/domain/browse`);
+  if (!res.ok) throw new Error("Failed to get domains");
+  const data = await res.json();
+  return data.domains || [];
+}
+
+// Initiate article purchase for a domain
+export async function initiateArticlePurchase(request: {
+  domainId: string;
+  articleTitle: string;
+  topic: string;
+  niche?: string;
+  keyword?: string;
+  targetUrl?: string; // Optional backlink
+  anchorText?: string; // Optional backlink anchor text
+  email: string;
+  notes?: string;
+}): Promise<PurchaseInitiateResponse> {
+  const res = await fetch(`${API_BASE}/purchase/initiate-article`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      ...request,
+      type: "ARTICLE_GENERATION", // Distinguish from backlink orders
+    }),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json();
+    throw new Error(errorData.message || "Failed to initiate article purchase");
+  }
+
+  return res.json();
+}
+
+// Get order details for customer configuration
+export async function getOrderDetails(
+  orderId: string
+): Promise<{ order: any }> {
+  const res = await fetch(`${API_BASE}/purchase/order/${orderId}`);
+  if (!res.ok) {
+    const errorData = await res.json();
+    throw new Error(errorData.message || "Failed to get order details");
+  }
+  return res.json();
+}
+
+// Customer article generation
+export async function customerConfigureArticle(articleData: {
+  orderId: string;
+  title: string;
+  niche?: string;
+  keyword?: string;
+  topic: string;
+  targetURL?: string;
+  anchorText?: string;
+  model?: string;
+  provider?: string;
+}): Promise<{
+  versionId: string;
+  versionNum: number;
+  content: string;
+  previewContent: string;
+}> {
+  const res = await fetch(`${API_BASE}/purchase/configure-article`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(articleData),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json();
+    throw new Error(errorData.message || "Failed to generate article");
+  }
+
+  return res.json();
+}
+
+// Regenerate customer article
+export async function customerRegenerateArticle(data: {
+  orderId: string;
+  versionId: string;
+  title: string;
+  niche?: string;
+  keyword?: string;
+  topic: string;
+  targetURL?: string;
+  anchorText?: string;
+  model?: string;
+  provider?: string;
+}): Promise<{
+  versionId: string;
+  versionNum: number;
+  content: string;
+  previewContent: string;
+}> {
+  const res = await fetch(`${API_BASE}/purchase/regenerate-article`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(data),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json();
+    throw new Error(errorData.message || "Failed to regenerate article");
+  }
+
+  return res.json();
+}
+
+// Submit article for admin review
+export async function customerSubmitArticleForReview(data: {
+  orderId: string;
+  versionId: string;
+}): Promise<{ reviewId: string }> {
+  const res = await fetch(`${API_BASE}/purchase/submit-for-review`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(data),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json();
+    throw new Error(errorData.message || "Failed to submit for review");
+  }
+
+  return res.json();
+}
+
+// Customer backlink integration (compatible with existing CustomerBacklinkConfiguration)
+export async function customerIntegrateBacklink(backlinkData: {
+  orderId: string;
+  backlinkUrl: string;
+  anchorText: string;
+  model?: string;
+  provider?: string;
+}): Promise<{
+  success: boolean;
+  message: string;
+  versionId: string;
+  versionNum: number;
+  content: string;
+  previewContent: string;
+}> {
+  const res = await fetch(`${API_BASE}/purchase/configure-backlink`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(backlinkData),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json();
+    throw new Error(errorData.message || "Failed to integrate backlink");
+  }
+
+  return res.json();
+}
+
+// Regenerate customer backlink content
+export async function customerRegenerateBacklink(data: {
+  orderId: string;
+  versionId: string;
+  backlinkUrl: string;
+  anchorText: string;
+  model?: string;
+  provider?: string;
+}): Promise<{
+  success: boolean;
+  message: string;
+  versionId: string;
+  versionNum: number;
+  content: string;
+  previewContent: string;
+}> {
+  const res = await fetch(`${API_BASE}/purchase/regenerate-backlink`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(data),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json();
+    throw new Error(errorData.message || "Failed to regenerate content");
+  }
+
+  return res.json();
+}
+
+// Submit customer backlink for admin review (compatible with CustomerBacklinkConfiguration)
+export async function customerSubmitForReview(data: {
+  orderId: string;
+  versionId: string;
+}): Promise<{ success: boolean; message: string }> {
+  const res = await fetch(`${API_BASE}/purchase/submit-for-review`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(data),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json();
+    throw new Error(errorData.message || "Failed to submit for review");
+  }
+
+  return res.json();
+}
+
+// Regenerate backlink integration (customer can regenerate unlimited times)
+export async function regenerateBacklink(orderId: string): Promise<{
+  success: boolean;
+  message: string;
+  versionId?: string;
+}> {
+  const res = await fetch(`${API_BASE}/purchase/regenerate-backlink`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ orderId }),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json();
+    throw new Error(errorData.message || "Failed to regenerate backlink");
+  }
+
+  return res.json();
 }

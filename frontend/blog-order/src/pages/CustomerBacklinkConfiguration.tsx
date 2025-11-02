@@ -7,7 +7,7 @@ import {
   customerIntegrateBacklink,
   customerRegenerateBacklink,
   customerSubmitForReview,
-} from "../services/backlinkService";
+} from "../services/purchaseService";
 
 interface OrderDetails {
   id: string;

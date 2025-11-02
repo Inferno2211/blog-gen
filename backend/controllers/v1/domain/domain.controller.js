@@ -9,7 +9,7 @@ const { buildDomain: buildDomainService, downloadDomain: downloadDomainService, 
 // Supports single and bulk add, assigns tags, and can create template folder
 async function createDomain(req, res) {
     try {
-        const { name, slug, url, tags, template, domains } = req.body;
+        const { name, slug, url, tags, categories, domain_age, domain_rating, template, domains } = req.body;
         // Bulk add
         if (Array.isArray(domains)) {
             const results = await domainService.bulkCreateDomains(domains, tags);
@@ -38,6 +38,9 @@ async function createDomain(req, res) {
             slug,
             url: url || '',
             tags: Array.isArray(tags) ? tags.join(',') : tags || '',
+            categories: categories || null,
+            domain_age: domain_age ? parseInt(domain_age, 10) : null,
+            domain_rating: domain_rating ? parseFloat(domain_rating) : null,
         };
         const created = await domainService.createDomain(domainData);
         // if (template) {
@@ -727,7 +730,41 @@ async function getDomainStatus(req, res) {
     }
 }
 
+// ===== PUBLIC ENDPOINTS =====
+
+// GET /api/v1/domain/browse
+// Browse domains for article requests (public endpoint)
+async function browseDomains(req, res) {
+    try {
+        const domains = await domainService.getAllDomains();
+        
+        // Filter out sensitive information and only return domains that are ready for articles
+        const publicDomains = domains.map(domain => ({
+            id: domain.id,
+            name: domain.name,
+            slug: domain.slug,
+            tags: domain.tags,
+            // You could add more public fields here if needed
+        }));
+
+        res.json({
+            success: true,
+            domains: publicDomains,
+            total: publicDomains.length
+        });
+    } catch (err) {
+        console.error('Failed to browse domains:', err);
+        res.status(500).json({ 
+            success: false,
+            error: 'Failed to load domains' 
+        });
+    }
+}
+
 module.exports = {
+    // Public Operations
+    browseDomains,
+
     // CRUD Operations
     createDomain,
     getDomain,

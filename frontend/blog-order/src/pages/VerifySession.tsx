@@ -28,19 +28,28 @@ export default function VerifySession() {
 
       if (result.valid && result.sessionData) {
         // Check if this session already has payment completed
-        // If so, redirect to backlink configuration
-        if (result.sessionData.status === "PAID") {
-          // Session is already paid, redirect to backlink configuration
-          navigate(
-            `/configure-backlink?session_id=${
-              result.sessionData.sessionId
-            }&order_id=${result.sessionData.orderId || "pending"}`
-          );
+        if (result.alreadyPaid) {
+          // Session is already paid, redirect to appropriate configuration
+          const isArticleGeneration =
+            result.orderType === "article_generation" ||
+            result.sessionData.backlink_data?.type === "ARTICLE_GENERATION";
+          const orderId = result.orderId || "pending";
+
+          if (isArticleGeneration) {
+            navigate(`/configure-article?order_id=${orderId}`);
+          } else {
+            navigate(
+              `/configure-backlink?session_id=${result.sessionData.sessionId}&order_id=${orderId}`
+            );
+          }
         } else if (result.stripeCheckoutUrl) {
           // Session is pending payment, redirect to Stripe checkout
           window.location.href = result.stripeCheckoutUrl;
         } else {
-          setError("Unable to process verification link");
+          // Need to complete payment first
+          setError(
+            "Please complete your payment first. You should receive a payment link via email after verification."
+          );
         }
       } else {
         setError(result.error || "Invalid or expired verification link");

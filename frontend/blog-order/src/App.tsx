@@ -15,10 +15,13 @@ import ViewDomains from "./pages/ViewDomains";
 import ManageBacklinks from "./pages/ManageBacklinks";
 import BacklinkReview from "./pages/BacklinkReview";
 import Homepage from "./pages/Homepage";
+import RequestArticle from "./pages/RequestArticle";
 import VerifySession from "./pages/VerifySession";
 import PaymentSuccess from "./pages/PaymentSuccess";
 import CustomerBacklinkConfiguration from "./pages/CustomerBacklinkConfiguration";
+import CustomerArticleConfiguration from "./pages/CustomerArticleConfiguration";
 import ReviewSubmitted from "./pages/ReviewSubmitted";
+import OrderStatus from "./pages/OrderStatus";
 import { isAuthenticated } from "./services/authService";
 
 function App() {
@@ -27,11 +30,17 @@ function App() {
       <Routes>
         {/* Public routes */}
         <Route path="/purchase" element={<Homepage />} />
+        <Route path="/request-article" element={<RequestArticle />} />
         <Route path="/verify" element={<VerifySession />} />
         <Route path="/payment/success" element={<PaymentSuccess />} />
+        <Route path="/order-status" element={<OrderStatus />} />
         <Route
           path="/configure-backlink"
           element={<CustomerBacklinkConfiguration />}
+        />
+        <Route
+          path="/configure-article"
+          element={<CustomerArticleConfiguration />}
         />
         <Route path="/review-submitted" element={<ReviewSubmitted />} />
 

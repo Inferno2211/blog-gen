@@ -37,12 +37,12 @@ async function getInternalLinkCandidates(domainId, excludeArticleId) {
             domain_id: domainId,
             id: excludeArticleId ? { not: excludeArticleId } : undefined
         },
-        select: { id: true, slug: true, topic: true, title: true }
+        select: { id: true, slug: true, topic: true }
     });
     return candidates
         .filter(a => a.slug)
         .map(a => ({
-            title: a.title || a.topic || a.slug,
+            title: a.topic || a.slug,
             slug: a.slug,
             url: `/posts/${a.slug}/`
         }));
@@ -58,31 +58,68 @@ function countExternalLinks(markdown) {
 
 /** Helper: check specific backlink exists (anchor + URL) */
 function hasSpecificBacklink(markdown, targetUrl, anchorText) {
-    if (!targetUrl || !anchorText) return false;
-    const escapedUrl = targetUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const escapedAnchor = anchorText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const regex = new RegExp(`\\[([^\\]]*${escapedAnchor}[^\\]]*)\\]\\(${escapedUrl}\\)`, 'i');
-    return regex.test(markdown);
+    if (!markdown || !targetUrl || !anchorText) return false;
+
+    // Parse markdown links
+    const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/gi;
+    const normTarget = targetUrl.endsWith('/') ? targetUrl.slice(0, -1) : targetUrl;
+
+    for (const m of markdown.matchAll(linkRegex)) {
+        const linkText = (m[1] || '').trim();
+        let url = (m[2] || '').trim();
+        // normalize
+        if (url.endsWith('/')) url = url.slice(0, -1);
+
+        // Check URL equality (exact or without trailing slash)
+        if (url === normTarget || url === targetUrl) {
+            // Check anchor text is present within the link text (case-insensitive)
+            if (linkText.toLowerCase().includes(anchorText.toLowerCase())) return true;
+        }
+    }
+
+    // Fallback checks: direct substring matches (less reliable)
+    if (markdown.includes(`[${anchorText}](${targetUrl})`) || markdown.includes(`](${targetUrl})`)) return true;
+
+    return false;
 }
 
 /** Helper: count internal links to /posts/... */
 function countInternalLinks(markdown) {
-    const regex = /\[[^\]]+\]\((\/posts\/[\w-]+\/?)\)/gi;
+    if (!markdown) return 0;
+    const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/gi;
     let count = 0;
-    while (regex.exec(markdown)) count++;
+    const matches = markdown.matchAll(linkRegex);
+    for (const m of matches) {
+        const url = (m[2] || '').trim();
+        if (url.startsWith('/posts/')) count++;
+    }
     return count;
 }
 
 /** Helper: whether any internal link is to expected candidates */
 function hasInternalLinkToCandidates(markdown, candidates = []) {
     if (!Array.isArray(candidates) || candidates.length === 0) return false;
-    return candidates.some((c) => {
-        const url = c?.url || '';
-        if (!url) return false;
-        const escapedUrl = url.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const regex = new RegExp(`\\]\(${escapedUrl}\\)`, 'i');
-        return regex.test(markdown);
-    });
+    if (!markdown) return false;
+
+    // Parse all markdown links once and normalize URLs
+    const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/gi;
+    const foundUrls = new Set();
+    for (const m of markdown.matchAll(linkRegex)) {
+        let url = (m[2] || '').trim();
+        // normalize by removing trailing slash for comparison
+        if (url.endsWith('/')) url = url.slice(0, -1);
+        foundUrls.add(url);
+    }
+
+    // Normalize candidate urls and check membership
+    for (const c of candidates) {
+        const url = (c?.url || '').trim();
+        if (!url) continue;
+        const norm = url.endsWith('/') ? url.slice(0, -1) : url;
+        if (foundUrls.has(norm)) return true;
+    }
+
+    return false;
 }
 
 /**
@@ -180,7 +217,33 @@ async function performQC(articleId, content, maxRetries = 3, options = {}) {
             if (internalCount > 0) hardChecksPass = false;
         }
 
+        // Detailed hard-check logging to aid debugging
+        const hardCheckDetails = {
+            externalLinks: null,
+            backlinkRequired: null,
+            backlinkPresent: null,
+            internalCount: null,
+            internalToCandidates: null
+        };
+
+        if (options.noExternalBacklinks) {
+            const externalCount = countExternalLinks(lastContent);
+            hardCheckDetails.externalLinks = externalCount;
+        } else {
+            if (backlinkUrl && anchorText) {
+                hardCheckDetails.backlinkRequired = true;
+                hardCheckDetails.backlinkPresent = hasSpecificBacklink(lastContent, backlinkUrl, anchorText);
+            } else {
+                hardCheckDetails.backlinkRequired = false;
+            }
+        }
+
+        const internalCount = countInternalLinks(lastContent);
+        hardCheckDetails.internalCount = internalCount;
+        hardCheckDetails.internalToCandidates = hasInternalLinkToCandidates(lastContent, options.internalLinkCandidates || []);
+
         console.log('Hard checks pass: ', hardChecksPass);
+        console.log('Hard check details: ', JSON.stringify(hardCheckDetails, null, 2));
         console.log('Last QC result: ', lastQCResult);
         const qcPass = lastQCResult && (lastQCResult.status === 'pass');
         if (qcPass && hardChecksPass) {
@@ -206,6 +269,21 @@ async function performQC(articleId, content, maxRetries = 3, options = {}) {
                 last_qc_notes: lastQCResult,
                 prompt: meta.userPrompt || ''
             };
+
+            // Add backlink metadata if we have backlink information
+            if (!options.noExternalBacklinks && (backlinkUrl || anchorText)) {
+                versionData.backlink_metadata = {
+                    backlink_url: backlinkUrl || '',
+                    anchor_text: anchorText || '',
+                    original_content_hash: require('crypto').createHash('md5').update(contentWithImages).digest('hex'),
+                    integration_date: new Date().toISOString()
+                };
+                
+                // Set backlink review status for customer orders
+                if (meta.userPrompt || options.isCustomerGenerated) {
+                    versionData.backlink_review_status = 'PENDING_REVIEW';
+                }
+            }
 
             // Save immediately on pass
             const saved = await prisma.articleVersion.create({ data: versionData });
@@ -464,7 +542,8 @@ async function createVersionForArticle(articleId, genParams, maxRetries = 3) {
         provider,
         userPrompt,
         noExternalBacklinks: !!noExternalBacklinks,
-        internalLinkCandidates
+        internalLinkCandidates,
+        isCustomerGenerated: true // Flag this as customer-generated content
     });
     return qcResult;
 }

@@ -4,6 +4,7 @@ const purchaseController = require('../../../controllers/v1/purchase/purchase.co
 
 // Purchase workflow endpoints
 router.post('/initiate', purchaseController.initiatePurchase);
+router.post('/initiate-article', purchaseController.initiateArticlePurchase);
 router.post('/verify-session', purchaseController.verifySession);
 router.post('/complete', purchaseController.completePayment);
 router.get('/status/:orderId', purchaseController.getOrderStatus);
@@ -12,6 +13,15 @@ router.get('/status/:orderId', purchaseController.getOrderStatus);
 router.get('/order/:orderId', purchaseController.getOrderDetails);
 router.post('/configure-backlink', purchaseController.configureBacklink);
 router.post('/regenerate-backlink', purchaseController.regenerateBacklink);
+
+// Customer article generation endpoints
+router.post('/configure-article', purchaseController.configureArticle);
+router.post('/regenerate-article', purchaseController.regenerateArticle);
+
+// Revision request endpoint
+router.post('/request-revision', purchaseController.requestRevision);
+
+// Submit for review (works for both backlinks and articles)
 router.post('/submit-for-review', purchaseController.submitForReview);
 
 // Stripe webhook endpoint (raw body middleware applied at app level)

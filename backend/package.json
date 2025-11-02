@@ -1,14 +1,21 @@
 {
   "scripts": {
-    "test": "jest"
+    "test": "jest",
+    "start": "node index.js",
+    "worker": "node services/queue/QueueWorker.js",
+    "dev": "nodemon index.js",
+    "worker:dev": "nodemon services/queue/QueueWorker.js",
+    "status": "node check-system-status.js"
   },
   "dependencies": {
     "@google/genai": "^1.8.0",
     "@google/generative-ai": "^0.24.1",
     "@prisma/client": "^6.11.1",
     "@sendgrid/mail": "^8.1.5",
+    "@types/bull": "^3.15.9",
     "archiver": "^7.0.1",
     "bcryptjs": "^3.0.2",
+    "bull": "^4.16.5",
     "cloudinary": "^2.7.0",
     "cors": "^2.8.5",
     "dotenv": "^17.2.1",
@@ -16,12 +23,14 @@
     "fs-extra": "^11.3.0",
     "jsonwebtoken": "^9.0.2",
     "prisma": "^6.12.0",
+    "redis": "^5.8.3",
     "slugify": "^1.6.6",
     "stripe": "^18.5.0"
   },
   "devDependencies": {
     "axios": "^1.12.1",
     "jest": "^30.1.3",
+    "nodemon": "^3.1.10",
     "supertest": "^7.1.4"
   }
 }

@@ -91,6 +91,68 @@ export async function customerRegenerateBacklink(
   return res.json();
 }
 
+// Customer article generation interfaces
+interface CustomerArticleRequest {
+  orderId: string;
+  title: string;
+  niche?: string;
+  keyword?: string;
+  topic: string;
+  targetURL?: string;
+  anchorText?: string;
+  model?: string;
+  provider?: string;
+}
+
+interface CustomerArticleResponse {
+  success: boolean;
+  message: string;
+  versionId: string;
+  versionNum: number;
+  content: string;
+  previewContent: string;
+}
+
+// Customer article generation after payment
+export async function customerConfigureArticle(
+  articleData: CustomerArticleRequest
+): Promise<CustomerArticleResponse> {
+  const res = await fetch(`${API_BASE}/purchase/configure-article`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(articleData),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json();
+    throw new Error(errorData.error || "Failed to generate article");
+  }
+
+  return res.json();
+}
+
+// Regenerate customer article content
+export async function customerRegenerateArticle(
+  data: CustomerArticleRequest & { versionId: string }
+): Promise<CustomerArticleResponse> {
+  const res = await fetch(`${API_BASE}/purchase/regenerate-article`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(data),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json();
+    throw new Error(errorData.error || "Failed to regenerate article");
+  }
+
+  return res.json();
+}
+
 // Submit customer backlink for admin review
 export async function customerSubmitForReview(data: {
   orderId: string;

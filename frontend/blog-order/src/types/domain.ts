@@ -4,6 +4,9 @@ export interface Domain {
   slug: string;
   url: string;
   tags: string;
+  categories?: string;  // Comma-separated categories
+  domain_age?: number;  // Domain age in years
+  domain_rating?: number;  // Domain rating/SEO value (0-100 scale)
   created_at?: string;
   articles?: any[];
   articleCount?: number;
@@ -14,6 +17,9 @@ export interface CreateDomainRequest {
   slug: string;
   url?: string;
   tags?: string;
+  categories?: string;  // Comma-separated categories
+  domain_age?: number;  // Domain age in years
+  domain_rating?: number;  // Domain rating/SEO value (0-100 scale)
   template?: string;
 }
 

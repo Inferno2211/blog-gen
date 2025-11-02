@@ -1,8 +1,10 @@
 const AuthService = require('./AuthService');
 const { PrismaClient } = require('@prisma/client');
+const QueueService = require('./queue/QueueService');
 
 const prisma = new PrismaClient();
 const authService = new AuthService();
+const queueService = new QueueService();
 
 class StartupService {
   constructor() {
@@ -18,11 +20,47 @@ class StartupService {
     try {
       console.log('🚀 Initializing system...');
       
+      // Check Redis connection first
+      await this.checkRedisConnection();
+      
       await this.initializeDefaultAdmin();
       
       console.log('✅ System initialization completed successfully');
     } catch (error) {
       console.error('❌ System initialization failed:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Check Redis connection and display status
+   */
+  async checkRedisConnection() {
+    try {
+      console.log('🔍 Checking Redis connection...');
+      const redisHealth = await queueService.checkRedisHealth();
+      
+      if (redisHealth.connected) {
+        console.log('✅ Redis Connection: HEALTHY');
+        console.log(`   - Host: ${redisHealth.host}:${redisHealth.port}`);
+        console.log(`   - Version: ${redisHealth.version}`);
+        console.log(`   - Memory Usage: ${redisHealth.memoryUsage}`);
+        console.log(`   - Ping: ${redisHealth.ping}`);
+      } else {
+        console.error('❌ Redis Connection: FAILED');
+        console.error(`   - Host: ${redisHealth.host}:${redisHealth.port}`);
+        console.error(`   - Error: ${redisHealth.error}`);
+        console.error('');
+        console.error('⚠️  WARNING: Queue system will not work without Redis!');
+        console.error('   Please start Redis server:');
+        console.error('   - Windows WSL: wsl sudo redis-server');
+        console.error('   - macOS: brew services start redis');
+        console.error('   - Linux: sudo systemctl start redis');
+        console.error('');
+        throw new Error('Redis connection failed - Queue system unavailable');
+      }
+    } catch (error) {
+      console.error('❌ Redis health check failed:', error.message);
       throw error;
     }
   }

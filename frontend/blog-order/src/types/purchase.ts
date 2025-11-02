@@ -85,6 +85,9 @@ export interface SessionVerifyResponse {
     orderId?: string;
   };
   stripeCheckoutUrl?: string;
+  alreadyPaid?: boolean;
+  orderId?: string;
+  orderType?: string;
   error?: string;
 }
 
@@ -98,7 +101,74 @@ export interface PurchaseCompleteResponse {
 }
 
 export interface OrderStatusResponse {
-  status: string;
-  progress: string;
-  estimatedCompletion?: string;
+  order: Order;
+  progress: {
+    status: string;
+    message: string;
+    currentStage: string;
+    stages: {
+      name: string;
+      status: "completed" | "in-progress" | "pending";
+      timestamp?: string;
+    }[];
+  };
+  queueStatus?: {
+    queue: string;
+    state: string;
+    progress?: number;
+    timestamp: string;
+  };
+  content?: {
+    contentMd: string;
+    title: string;
+    preview?: string;
+  };
+  regenerationCount?: number;
+}
+
+// Backend API response structure (actual response from API)
+export interface BackendOrderStatusResponse {
+  success: boolean;
+  message: string;
+  data: {
+    status: string;
+    statusMessage: string;
+    progress: {
+      step: number;
+      total: number;
+      description: string;
+    };
+    orderDetails: {
+      orderId: string;
+      articleId: string;
+      articleSlug?: string;
+      domainName?: string;
+      backlinkData: {
+        keyword: string;
+        target_url: string;
+        notes?: string;
+      };
+      createdAt: string;
+      completedAt?: string;
+      customerEmail: string;
+    };
+    version?: {
+      versionId: string;
+      versionNum: number;
+      content: string;
+      qcStatus: string;
+      backlinkReviewStatus: string;
+    } | null;
+    queue: {
+      hasActiveJob: boolean;
+      hasFailedJob: boolean;
+      jobs: Array<{
+        queue: string;
+        state: string;
+        progress?: number;
+      }>;
+    };
+    canRequestRevision: boolean;
+    canSubmitForReview: boolean;
+  };
 }
