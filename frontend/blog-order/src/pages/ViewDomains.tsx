@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   getAllDomains, 
   updateDomain, 
@@ -17,6 +17,14 @@ const ViewDomains = () => {
   const [domainInfos, setDomainInfos] = useState<DomainInfo[]>([]);
   const [templates, setTemplates] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  // Search & filter state
+  const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [filterDRMin, setFilterDRMin] = useState<number | ''>('');
+  const [filterDRMax, setFilterDRMax] = useState<number | ''>('');
+  const [filterAgeMin, setFilterAgeMin] = useState<number | ''>('');
+  const [filterAgeMax, setFilterAgeMax] = useState<number | ''>('');
+  const [filterCategory, setFilterCategory] = useState('');
   const [editingDomain, setEditingDomain] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<Domain>>({});
   const [showCreateFolder, setShowCreateFolder] = useState(false);
@@ -27,6 +35,12 @@ const ViewDomains = () => {
   useEffect(() => {
     loadData();
   }, []);
+
+  // Debounce search input for better performance
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(searchTerm.trim().toLowerCase()), 250);
+    return () => clearTimeout(t);
+  }, [searchTerm]);
 
   const loadData = async () => {
     try {
@@ -80,6 +94,34 @@ const ViewDomains = () => {
       console.error('Failed to update domain:', error);
     }
   };
+
+  // Derived filtered list (client-side filtering; okay for ~100-1,000 items)
+  const filteredDomains = useMemo(() => {
+    const term = debouncedSearch;
+    return domains.filter((d) => {
+      // text match: name, slug, url
+      if (term) {
+        const hay = `${d.name} ${d.slug} ${d.url || ''}`.toLowerCase();
+        if (!hay.includes(term)) return false;
+      }
+
+      // DR filters
+      if (filterDRMin !== '' && (d.domain_rating === undefined || d.domain_rating < Number(filterDRMin))) return false;
+      if (filterDRMax !== '' && (d.domain_rating === undefined || d.domain_rating > Number(filterDRMax))) return false;
+
+      // Age filters
+      if (filterAgeMin !== '' && (d.domain_age === undefined || d.domain_age < Number(filterAgeMin))) return false;
+      if (filterAgeMax !== '' && (d.domain_age === undefined || d.domain_age > Number(filterAgeMax))) return false;
+
+      // Category filter (matches any category token)
+      if (filterCategory) {
+        const cats = (d.categories || '').toLowerCase().split(',').map(s => s.trim()).filter(Boolean);
+        if (!cats.some(c => c.includes(filterCategory.toLowerCase()))) return false;
+      }
+
+      return true;
+    });
+  }, [domains, debouncedSearch, filterDRMin, filterDRMax, filterAgeMin, filterAgeMax, filterCategory]);
 
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to delete this domain?')) return;
@@ -164,6 +206,80 @@ const ViewDomains = () => {
         </button>
       </div>
 
+      {/* Search & Filters */}
+      <div className="bg-white dark:bg-gray-900 rounded-xl p-4 mb-6 shadow">
+        <div className="flex flex-col md:flex-row md:items-center md:space-x-4 gap-3">
+          <input
+            type="text"
+            placeholder="Search by name, slug or URL"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="flex-1 p-2 border rounded bg-gray-50 dark:bg-gray-800"
+          />
+
+          <input
+            type="text"
+            placeholder="Category filter (e.g. tech)"
+            value={filterCategory}
+            onChange={(e) => setFilterCategory(e.target.value)}
+            className="w-40 p-2 border rounded bg-gray-50 dark:bg-gray-800"
+          />
+
+          <div className="flex items-center space-x-2">
+            <input
+              type="number"
+              placeholder="Min DR"
+              value={filterDRMin === '' ? '' : String(filterDRMin)}
+              onChange={(e) => setFilterDRMin(e.target.value === '' ? '' : Number(e.target.value))}
+              className="w-20 p-2 border rounded bg-gray-50 dark:bg-gray-800"
+            />
+            <span className="text-gray-500">—</span>
+            <input
+              type="number"
+              placeholder="Max DR"
+              value={filterDRMax === '' ? '' : String(filterDRMax)}
+              onChange={(e) => setFilterDRMax(e.target.value === '' ? '' : Number(e.target.value))}
+              className="w-20 p-2 border rounded bg-gray-50 dark:bg-gray-800"
+            />
+          </div>
+
+          <div className="flex items-center space-x-2">
+            <input
+              type="number"
+              placeholder="Min Age"
+              value={filterAgeMin === '' ? '' : String(filterAgeMin)}
+              onChange={(e) => setFilterAgeMin(e.target.value === '' ? '' : Number(e.target.value))}
+              className="w-20 p-2 border rounded bg-gray-50 dark:bg-gray-800"
+            />
+            <span className="text-gray-500">—</span>
+            <input
+              type="number"
+              placeholder="Max Age"
+              value={filterAgeMax === '' ? '' : String(filterAgeMax)}
+              onChange={(e) => setFilterAgeMax(e.target.value === '' ? '' : Number(e.target.value))}
+              className="w-20 p-2 border rounded bg-gray-50 dark:bg-gray-800"
+            />
+          </div>
+
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={() => {
+                setSearchTerm('');
+                setFilterCategory('');
+                setFilterDRMin('');
+                setFilterDRMax('');
+                setFilterAgeMin('');
+                setFilterAgeMax('');
+              }}
+              className="px-3 py-2 bg-gray-200 dark:bg-gray-700 rounded"
+            >
+              Clear
+            </button>
+            <div className="text-sm text-gray-600">Results: {filteredDomains.length}</div>
+          </div>
+        </div>
+      </div>
+
       {/* Create Domain Folder Modal */}
       {showCreateFolder && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -230,7 +346,7 @@ const ViewDomains = () => {
               </tr>
             </thead>
             <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
-              {domains.map((domain) => (
+              {filteredDomains.map((domain) => (
                 <tr key={domain.id} className="hover:bg-gray-50 dark:hover:bg-gray-800">
                   <td className="px-6 py-4 whitespace-nowrap">
                     {editingDomain === domain.id ? (

@@ -123,18 +123,21 @@ async function getAllDomains(req, res) {
         const domains = await domainService.getAllDomainsWithArticles();
         const total = domains?.length || 0;
         if (domains) {
-            const result = domains.map(d => ({
-                id: d.id,
-                name: d.name,
-                slug: d.slug,
-                url: d.url,
-                tags: d.tags,
-                created_at: d.created_at,
-                articles: d.articles,
-                articleCount: d.articles?.length || 0
-            }));
-            res.json({ total, domains: result });
-        }
+                const result = domains.map(d => ({
+                    id: d.id,
+                    name: d.name,
+                    slug: d.slug,
+                    url: d.url,
+                    tags: d.tags,
+                    categories: d.categories,
+                    domain_age: d.domain_age,
+                    domain_rating: d.domain_rating,
+                    created_at: d.created_at,
+                    articles: d.articles,
+                    articleCount: d.articles?.length || 0
+                }));
+                res.json({ total, domains: result });
+            }
         else {
             res.json({ total, domains: [] });
         }
