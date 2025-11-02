@@ -1,16 +1,16 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { 
-  getAllDomains, 
-  updateDomain, 
-  deleteDomain, 
-  getAvailableTemplates, 
+import React, { useState, useEffect, useMemo } from "react";
+import {
+  getAllDomains,
+  updateDomain,
+  deleteDomain,
+  getAvailableTemplates,
   switchDomainTemplate,
   createDomainFolder,
   buildDomain,
   getDomainStatus,
-  downloadDomain
-} from '../services/domainService';
-import type { Domain, DomainInfo, TemplateResponse } from '../types/domain';
+  downloadDomain,
+} from "../services/domainService";
+import type { Domain, DomainInfo, TemplateResponse } from "../types/domain";
 
 const ViewDomains = () => {
   const [domains, setDomains] = useState<Domain[]>([]);
@@ -18,18 +18,18 @@ const ViewDomains = () => {
   const [templates, setTemplates] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   // Search & filter state
-  const [searchTerm, setSearchTerm] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [filterDRMin, setFilterDRMin] = useState<number | ''>('');
-  const [filterDRMax, setFilterDRMax] = useState<number | ''>('');
-  const [filterAgeMin, setFilterAgeMin] = useState<number | ''>('');
-  const [filterAgeMax, setFilterAgeMax] = useState<number | ''>('');
-  const [filterCategory, setFilterCategory] = useState('');
+  const [searchTerm, setSearchTerm] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [filterDRMin, setFilterDRMin] = useState<number | "">("");
+  const [filterDRMax, setFilterDRMax] = useState<number | "">("");
+  const [filterAgeMin, setFilterAgeMin] = useState<number | "">("");
+  const [filterAgeMax, setFilterAgeMax] = useState<number | "">("");
+  const [filterCategory, setFilterCategory] = useState("");
   const [editingDomain, setEditingDomain] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<Domain>>({});
   const [showCreateFolder, setShowCreateFolder] = useState(false);
-  const [newDomainName, setNewDomainName] = useState('');
-  const [selectedTemplate, setSelectedTemplate] = useState('');
+  const [newDomainName, setNewDomainName] = useState("");
+  const [selectedTemplate, setSelectedTemplate] = useState("");
   const [statuses, setStatuses] = useState<Record<string, any>>({});
 
   useEffect(() => {
@@ -38,7 +38,10 @@ const ViewDomains = () => {
 
   // Debounce search input for better performance
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(searchTerm.trim().toLowerCase()), 250);
+    const t = setTimeout(
+      () => setDebouncedSearch(searchTerm.trim().toLowerCase()),
+      250
+    );
     return () => clearTimeout(t);
   }, [searchTerm]);
 
@@ -47,11 +50,11 @@ const ViewDomains = () => {
       setLoading(true);
       const [domainsRes, templatesRes] = await Promise.all([
         getAllDomains(),
-        getAvailableTemplates()
+        getAvailableTemplates(),
       ]);
       setDomains(domainsRes.domains);
       setTemplates(templatesRes.templates);
-      
+
       // Load domain statuses
       const statusPromises = domainsRes.domains.map(async (domain) => {
         try {
@@ -62,10 +65,13 @@ const ViewDomains = () => {
         }
       });
       const statusResults = await Promise.all(statusPromises);
-      const statusMap = statusResults.reduce((acc, status) => ({ ...acc, ...status }), {} as Record<string, any>);
+      const statusMap = statusResults.reduce(
+        (acc, status) => ({ ...acc, ...status }),
+        {} as Record<string, any>
+      );
       setStatuses(statusMap);
     } catch (error) {
-      console.error('Failed to load data:', error);
+      console.error("Failed to load data:", error);
     } finally {
       setLoading(false);
     }
@@ -80,18 +86,18 @@ const ViewDomains = () => {
       tags: domain.tags,
       categories: domain.categories,
       domain_age: domain.domain_age,
-      domain_rating: domain.domain_rating
+      domain_rating: domain.domain_rating,
     });
   };
 
   const handleSave = async (id: string) => {
     try {
       await updateDomain(id, editForm);
-      setDomains(domains.map(d => d.id === id ? { ...d, ...editForm } : d));
+      setDomains(domains.map((d) => (d.id === id ? { ...d, ...editForm } : d)));
       setEditingDomain(null);
       setEditForm({});
     } catch (error) {
-      console.error('Failed to update domain:', error);
+      console.error("Failed to update domain:", error);
     }
   };
 
@@ -101,46 +107,78 @@ const ViewDomains = () => {
     return domains.filter((d) => {
       // text match: name, slug, url
       if (term) {
-        const hay = `${d.name} ${d.slug} ${d.url || ''}`.toLowerCase();
+        const hay = `${d.name} ${d.slug} ${d.url || ""}`.toLowerCase();
         if (!hay.includes(term)) return false;
       }
 
       // DR filters
-      if (filterDRMin !== '' && (d.domain_rating === undefined || d.domain_rating < Number(filterDRMin))) return false;
-      if (filterDRMax !== '' && (d.domain_rating === undefined || d.domain_rating > Number(filterDRMax))) return false;
+      if (
+        filterDRMin !== "" &&
+        (d.domain_rating === undefined || d.domain_rating < Number(filterDRMin))
+      )
+        return false;
+      if (
+        filterDRMax !== "" &&
+        (d.domain_rating === undefined || d.domain_rating > Number(filterDRMax))
+      )
+        return false;
 
       // Age filters
-      if (filterAgeMin !== '' && (d.domain_age === undefined || d.domain_age < Number(filterAgeMin))) return false;
-      if (filterAgeMax !== '' && (d.domain_age === undefined || d.domain_age > Number(filterAgeMax))) return false;
+      if (
+        filterAgeMin !== "" &&
+        (d.domain_age === undefined || d.domain_age < Number(filterAgeMin))
+      )
+        return false;
+      if (
+        filterAgeMax !== "" &&
+        (d.domain_age === undefined || d.domain_age > Number(filterAgeMax))
+      )
+        return false;
 
       // Category filter (matches any category token)
       if (filterCategory) {
-        const cats = (d.categories || '').toLowerCase().split(',').map(s => s.trim()).filter(Boolean);
-        if (!cats.some(c => c.includes(filterCategory.toLowerCase()))) return false;
+        const cats = (d.categories || "")
+          .toLowerCase()
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean);
+        if (!cats.some((c) => c.includes(filterCategory.toLowerCase())))
+          return false;
       }
 
       return true;
     });
-  }, [domains, debouncedSearch, filterDRMin, filterDRMax, filterAgeMin, filterAgeMax, filterCategory]);
+  }, [
+    domains,
+    debouncedSearch,
+    filterDRMin,
+    filterDRMax,
+    filterAgeMin,
+    filterAgeMax,
+    filterCategory,
+  ]);
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this domain?')) return;
+    if (!confirm("Are you sure you want to delete this domain?")) return;
     try {
       await deleteDomain(id);
-      setDomains(domains.filter(d => d.id !== id));
+      setDomains(domains.filter((d) => d.id !== id));
     } catch (error) {
-      console.error('Failed to delete domain:', error);
+      console.error("Failed to delete domain:", error);
     }
   };
 
-  const handleSwitchTemplate = async (domainName: string, newTemplate: string) => {
+  const handleSwitchTemplate = async (
+    domainName: string,
+    newTemplate: string
+  ) => {
     try {
       await switchDomainTemplate(domainName, newTemplate);
       alert(`Template switched to ${newTemplate} for ${domainName}`);
       loadData(); // Reload to get updated status
     } catch (error) {
-      console.error('Failed to switch template:', error);
-      alert('Failed to switch template');
+      console.error("Failed to switch template:", error);
+      alert("Failed to switch template");
     }
   };
 
@@ -150,11 +188,11 @@ const ViewDomains = () => {
       await createDomainFolder(newDomainName);
       alert(`Domain folder created for ${newDomainName}`);
       setShowCreateFolder(false);
-      setNewDomainName('');
+      setNewDomainName("");
       loadData();
     } catch (error) {
-      console.error('Failed to create domain folder:', error);
-      alert('Failed to create domain folder');
+      console.error("Failed to create domain folder:", error);
+      alert("Failed to create domain folder");
     }
   };
 
@@ -164,8 +202,8 @@ const ViewDomains = () => {
       alert(`Domain ${domainName} built successfully!`);
       loadData(); // Reload to get updated status
     } catch (error) {
-      console.error('Failed to build domain:', error);
-      alert('Failed to build domain');
+      console.error("Failed to build domain:", error);
+      alert("Failed to build domain");
     }
   };
 
@@ -173,7 +211,7 @@ const ViewDomains = () => {
     try {
       const blob = await downloadDomain(domainName);
       const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
+      const a = document.createElement("a");
       a.href = url;
       a.download = `${domainName}.zip`;
       document.body.appendChild(a);
@@ -181,8 +219,8 @@ const ViewDomains = () => {
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
     } catch (error) {
-      console.error('Failed to download domain:', error);
-      alert('Failed to download domain');
+      console.error("Failed to download domain:", error);
+      alert("Failed to download domain");
     }
   };
 
@@ -197,7 +235,9 @@ const ViewDomains = () => {
   return (
     <div className="max-w-6xl mx-auto py-10">
       <div className="flex justify-between items-center mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">Manage Domains</h1>
+        <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">
+          Manage Domains
+        </h1>
         <button
           onClick={() => setShowCreateFolder(true)}
           className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition"
@@ -229,16 +269,24 @@ const ViewDomains = () => {
             <input
               type="number"
               placeholder="Min DR"
-              value={filterDRMin === '' ? '' : String(filterDRMin)}
-              onChange={(e) => setFilterDRMin(e.target.value === '' ? '' : Number(e.target.value))}
+              value={filterDRMin === "" ? "" : String(filterDRMin)}
+              onChange={(e) =>
+                setFilterDRMin(
+                  e.target.value === "" ? "" : Number(e.target.value)
+                )
+              }
               className="w-20 p-2 border rounded bg-gray-50 dark:bg-gray-800"
             />
             <span className="text-gray-500">—</span>
             <input
               type="number"
               placeholder="Max DR"
-              value={filterDRMax === '' ? '' : String(filterDRMax)}
-              onChange={(e) => setFilterDRMax(e.target.value === '' ? '' : Number(e.target.value))}
+              value={filterDRMax === "" ? "" : String(filterDRMax)}
+              onChange={(e) =>
+                setFilterDRMax(
+                  e.target.value === "" ? "" : Number(e.target.value)
+                )
+              }
               className="w-20 p-2 border rounded bg-gray-50 dark:bg-gray-800"
             />
           </div>
@@ -247,16 +295,24 @@ const ViewDomains = () => {
             <input
               type="number"
               placeholder="Min Age"
-              value={filterAgeMin === '' ? '' : String(filterAgeMin)}
-              onChange={(e) => setFilterAgeMin(e.target.value === '' ? '' : Number(e.target.value))}
+              value={filterAgeMin === "" ? "" : String(filterAgeMin)}
+              onChange={(e) =>
+                setFilterAgeMin(
+                  e.target.value === "" ? "" : Number(e.target.value)
+                )
+              }
               className="w-20 p-2 border rounded bg-gray-50 dark:bg-gray-800"
             />
             <span className="text-gray-500">—</span>
             <input
               type="number"
               placeholder="Max Age"
-              value={filterAgeMax === '' ? '' : String(filterAgeMax)}
-              onChange={(e) => setFilterAgeMax(e.target.value === '' ? '' : Number(e.target.value))}
+              value={filterAgeMax === "" ? "" : String(filterAgeMax)}
+              onChange={(e) =>
+                setFilterAgeMax(
+                  e.target.value === "" ? "" : Number(e.target.value)
+                )
+              }
               className="w-20 p-2 border rounded bg-gray-50 dark:bg-gray-800"
             />
           </div>
@@ -264,18 +320,20 @@ const ViewDomains = () => {
           <div className="flex items-center space-x-2">
             <button
               onClick={() => {
-                setSearchTerm('');
-                setFilterCategory('');
-                setFilterDRMin('');
-                setFilterDRMax('');
-                setFilterAgeMin('');
-                setFilterAgeMax('');
+                setSearchTerm("");
+                setFilterCategory("");
+                setFilterDRMin("");
+                setFilterDRMax("");
+                setFilterAgeMin("");
+                setFilterAgeMax("");
               }}
               className="px-3 py-2 bg-gray-200 dark:bg-gray-700 rounded"
             >
               Clear
             </button>
-            <div className="text-sm text-gray-600">Results: {filteredDomains.length}</div>
+            <div className="text-sm text-gray-600">
+              Results: {filteredDomains.length}
+            </div>
           </div>
         </div>
       </div>
@@ -347,13 +405,18 @@ const ViewDomains = () => {
             </thead>
             <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
               {filteredDomains.map((domain) => (
-                <tr key={domain.id} className="hover:bg-gray-50 dark:hover:bg-gray-800">
+                <tr
+                  key={domain.id}
+                  className="hover:bg-gray-50 dark:hover:bg-gray-800"
+                >
                   <td className="px-6 py-4 whitespace-nowrap">
                     {editingDomain === domain.id ? (
                       <input
                         type="text"
-                        value={editForm.name || ''}
-                        onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                        value={editForm.name || ""}
+                        onChange={(e) =>
+                          setEditForm({ ...editForm, name: e.target.value })
+                        }
                         className="w-full p-1 border rounded"
                       />
                     ) : (
@@ -371,13 +434,15 @@ const ViewDomains = () => {
                     {editingDomain === domain.id ? (
                       <input
                         type="text"
-                        value={editForm.url || ''}
-                        onChange={(e) => setEditForm({ ...editForm, url: e.target.value })}
+                        value={editForm.url || ""}
+                        onChange={(e) =>
+                          setEditForm({ ...editForm, url: e.target.value })
+                        }
                         className="w-full p-1 border rounded"
                       />
                     ) : (
                       <div className="text-sm text-gray-900 dark:text-gray-100">
-                        {domain.url || '-'}
+                        {domain.url || "-"}
                       </div>
                     )}
                   </td>
@@ -385,13 +450,15 @@ const ViewDomains = () => {
                     {editingDomain === domain.id ? (
                       <input
                         type="text"
-                        value={editForm.tags || ''}
-                        onChange={(e) => setEditForm({ ...editForm, tags: e.target.value })}
+                        value={editForm.tags || ""}
+                        onChange={(e) =>
+                          setEditForm({ ...editForm, tags: e.target.value })
+                        }
                         className="w-full p-1 border rounded"
                       />
                     ) : (
                       <div className="text-sm text-gray-900 dark:text-gray-100">
-                        {domain.tags || '-'}
+                        {domain.tags || "-"}
                       </div>
                     )}
                   </td>
@@ -399,14 +466,19 @@ const ViewDomains = () => {
                     {editingDomain === domain.id ? (
                       <input
                         type="text"
-                        value={editForm.categories || ''}
-                        onChange={(e) => setEditForm({ ...editForm, categories: e.target.value })}
+                        value={editForm.categories || ""}
+                        onChange={(e) =>
+                          setEditForm({
+                            ...editForm,
+                            categories: e.target.value,
+                          })
+                        }
                         placeholder="tech, finance"
                         className="w-full p-1 border rounded"
                       />
                     ) : (
                       <div className="text-sm text-gray-900 dark:text-gray-100">
-                        {domain.categories || '-'}
+                        {domain.categories || "-"}
                       </div>
                     )}
                   </td>
@@ -414,8 +486,15 @@ const ViewDomains = () => {
                     {editingDomain === domain.id ? (
                       <input
                         type="number"
-                        value={editForm.domain_age || ''}
-                        onChange={(e) => setEditForm({ ...editForm, domain_age: e.target.value ? parseInt(e.target.value) : undefined })}
+                        value={editForm.domain_age || ""}
+                        onChange={(e) =>
+                          setEditForm({
+                            ...editForm,
+                            domain_age: e.target.value
+                              ? parseInt(e.target.value)
+                              : undefined,
+                          })
+                        }
                         placeholder="5"
                         min="0"
                         max="50"
@@ -423,7 +502,7 @@ const ViewDomains = () => {
                       />
                     ) : (
                       <div className="text-sm text-gray-900 dark:text-gray-100">
-                        {domain.domain_age ? `${domain.domain_age}y` : '-'}
+                        {domain.domain_age ? `${domain.domain_age}y` : "-"}
                       </div>
                     )}
                   </td>
@@ -431,8 +510,15 @@ const ViewDomains = () => {
                     {editingDomain === domain.id ? (
                       <input
                         type="number"
-                        value={editForm.domain_rating || ''}
-                        onChange={(e) => setEditForm({ ...editForm, domain_rating: e.target.value ? parseFloat(e.target.value) : undefined })}
+                        value={editForm.domain_rating || ""}
+                        onChange={(e) =>
+                          setEditForm({
+                            ...editForm,
+                            domain_rating: e.target.value
+                              ? parseFloat(e.target.value)
+                              : undefined,
+                          })
+                        }
                         placeholder="75"
                         min="0"
                         max="100"
@@ -442,14 +528,20 @@ const ViewDomains = () => {
                     ) : (
                       <div className="text-sm text-gray-900 dark:text-gray-100">
                         {domain.domain_rating ? (
-                          <div className={`inline-flex px-2 py-1 text-xs rounded-full ${
-                            domain.domain_rating >= 70 ? 'bg-green-100 text-green-800' :
-                            domain.domain_rating >= 40 ? 'bg-yellow-100 text-yellow-800' :
-                            'bg-red-100 text-red-800'
-                          }`}>
+                          <div
+                            className={`inline-flex px-2 py-1 text-xs rounded-full ${
+                              domain.domain_rating >= 70
+                                ? "bg-green-100 text-green-800"
+                                : domain.domain_rating >= 40
+                                ? "bg-yellow-100 text-yellow-800"
+                                : "bg-red-100 text-red-800"
+                            }`}
+                          >
                             DR {domain.domain_rating}
                           </div>
-                        ) : '-'}
+                        ) : (
+                          "-"
+                        )}
                       </div>
                     )}
                   </td>
@@ -457,10 +549,16 @@ const ViewDomains = () => {
                     <div className="text-sm">
                       {statuses[domain.slug] ? (
                         <div>
-                          <div className={`inline-flex px-2 py-1 text-xs rounded-full ${
-                            statuses[domain.slug].exists ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                          }`}>
-                            {statuses[domain.slug].exists ? 'Active' : 'Inactive'}
+                          <div
+                            className={`inline-flex px-2 py-1 text-xs rounded-full ${
+                              statuses[domain.slug].exists
+                                ? "bg-green-100 text-green-800"
+                                : "bg-red-100 text-red-800"
+                            }`}
+                          >
+                            {statuses[domain.slug].exists
+                              ? "Active"
+                              : "Inactive"}
                           </div>
                           <div className="text-xs text-gray-500 mt-1">
                             {statuses[domain.slug].postCount || 0} posts
@@ -473,8 +571,10 @@ const ViewDomains = () => {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <select
-                      value={statuses[domain.slug]?.layout || 'default'}
-                      onChange={(e) => handleSwitchTemplate(domain.slug, e.target.value)}
+                      value={statuses[domain.slug]?.layout || "default"}
+                      onChange={(e) =>
+                        handleSwitchTemplate(domain.slug, e.target.value)
+                      }
                       className="text-sm border rounded px-2 py-1"
                     >
                       {templates.map((template) => (
@@ -551,4 +651,4 @@ const ViewDomains = () => {
   );
 };
 
-export default ViewDomains; 
+export default ViewDomains;

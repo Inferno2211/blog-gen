@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { getBrowseArticles } from "../services/purchaseService";
 import type { PublicArticle } from "../types/purchase";
 import ArticleGrid from "../components/ArticleGrid";
@@ -10,9 +10,27 @@ export default function Homepage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Search & filter state
+  const [searchTerm, setSearchTerm] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [filterDRMin, setFilterDRMin] = useState<number | "">("");
+  const [filterDRMax, setFilterDRMax] = useState<number | "">("");
+  const [filterAgeMin, setFilterAgeMin] = useState<number | "">("");
+  const [filterAgeMax, setFilterAgeMax] = useState<number | "">("");
+  const [filterCategory, setFilterCategory] = useState("");
+
   useEffect(() => {
     loadArticles();
   }, []);
+
+  // Debounce search input
+  useEffect(() => {
+    const timer = setTimeout(
+      () => setDebouncedSearch(searchTerm.trim().toLowerCase()),
+      300
+    );
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
 
   const loadArticles = async () => {
     try {
@@ -26,6 +44,71 @@ export default function Homepage() {
       setLoading(false);
     }
   };
+
+  // Filter articles by search and metadata
+  const filteredArticles = useMemo(() => {
+    const term = debouncedSearch;
+    return articles.filter((article) => {
+      // Text search: title, domain, niche, keyword
+      if (term) {
+        const haystack = `${article.title} ${article.domain}`.toLowerCase();
+        if (!haystack.includes(term)) return false;
+      }
+
+      // Domain metadata filters
+      const domainData = article.domainData;
+      if (!domainData) return true; // If no domain data, include by default
+
+      // DR filters
+      if (
+        filterDRMin !== "" &&
+        (domainData.domain_rating === undefined ||
+          domainData.domain_rating < Number(filterDRMin))
+      )
+        return false;
+      if (
+        filterDRMax !== "" &&
+        (domainData.domain_rating === undefined ||
+          domainData.domain_rating > Number(filterDRMax))
+      )
+        return false;
+
+      // Age filters
+      if (
+        filterAgeMin !== "" &&
+        (domainData.domain_age === undefined ||
+          domainData.domain_age < Number(filterAgeMin))
+      )
+        return false;
+      if (
+        filterAgeMax !== "" &&
+        (domainData.domain_age === undefined ||
+          domainData.domain_age > Number(filterAgeMax))
+      )
+        return false;
+
+      // Category filter
+      if (filterCategory) {
+        const cats = (domainData.categories || "")
+          .toLowerCase()
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean);
+        if (!cats.some((c) => c.includes(filterCategory.toLowerCase())))
+          return false;
+      }
+
+      return true;
+    });
+  }, [
+    articles,
+    debouncedSearch,
+    filterDRMin,
+    filterDRMax,
+    filterAgeMin,
+    filterAgeMax,
+    filterCategory,
+  ]);
 
   if (loading) {
     return (
@@ -158,25 +241,157 @@ export default function Homepage() {
           </div>
         </div>
 
+        {/* Search & Filter Controls */}
+        <div className="bg-white border border-gray-200 rounded-lg p-4 sm:p-6 mb-8 shadow-sm">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">
+            Search & Filter Articles
+          </h3>
+
+          <div className="flex flex-col gap-4">
+            {/* Search Input */}
+            <div className="w-full">
+              <input
+                type="text"
+                placeholder="Search by title or domain..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+
+            {/* Filters Row */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              <input
+                type="text"
+                placeholder="Category (e.g., tech)"
+                value={filterCategory}
+                onChange={(e) => setFilterCategory(e.target.value)}
+                className="p-2 border border-gray-300 rounded-lg text-sm"
+              />
+
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  placeholder="Min DR"
+                  value={filterDRMin === "" ? "" : String(filterDRMin)}
+                  onChange={(e) =>
+                    setFilterDRMin(
+                      e.target.value === "" ? "" : Number(e.target.value)
+                    )
+                  }
+                  className="w-full p-2 border border-gray-300 rounded-lg text-sm"
+                  min="0"
+                  max="100"
+                />
+                <span className="text-gray-400">—</span>
+                <input
+                  type="number"
+                  placeholder="Max DR"
+                  value={filterDRMax === "" ? "" : String(filterDRMax)}
+                  onChange={(e) =>
+                    setFilterDRMax(
+                      e.target.value === "" ? "" : Number(e.target.value)
+                    )
+                  }
+                  className="w-full p-2 border border-gray-300 rounded-lg text-sm"
+                  min="0"
+                  max="100"
+                />
+              </div>
+
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  placeholder="Min Age"
+                  value={filterAgeMin === "" ? "" : String(filterAgeMin)}
+                  onChange={(e) =>
+                    setFilterAgeMin(
+                      e.target.value === "" ? "" : Number(e.target.value)
+                    )
+                  }
+                  className="w-full p-2 border border-gray-300 rounded-lg text-sm"
+                  min="0"
+                />
+                <span className="text-gray-400">—</span>
+                <input
+                  type="number"
+                  placeholder="Max Age"
+                  value={filterAgeMax === "" ? "" : String(filterAgeMax)}
+                  onChange={(e) =>
+                    setFilterAgeMax(
+                      e.target.value === "" ? "" : Number(e.target.value)
+                    )
+                  }
+                  className="w-full p-2 border border-gray-300 rounded-lg text-sm"
+                  min="0"
+                />
+              </div>
+
+              <button
+                onClick={() => {
+                  setSearchTerm("");
+                  setFilterCategory("");
+                  setFilterDRMin("");
+                  setFilterDRMax("");
+                  setFilterAgeMin("");
+                  setFilterAgeMax("");
+                }}
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors text-sm font-medium"
+              >
+                Clear Filters
+              </button>
+            </div>
+
+            {/* Results Count */}
+            <div className="text-sm text-gray-600">
+              Showing{" "}
+              <span className="font-semibold">{filteredArticles.length}</span>{" "}
+              of <span className="font-semibold">{articles.length}</span>{" "}
+              articles
+            </div>
+          </div>
+        </div>
+
         {/* Articles Grid */}
         <div className="mb-8">
           <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-4 sm:mb-6">
-            Available Articles ({articles.length})
+            Available Articles
           </h2>
-          {articles.length === 0 ? (
+          {filteredArticles.length === 0 ? (
             <div className="text-center py-12">
               <p className="text-gray-500 text-lg">
-                No articles available for purchase at the moment.
+                {articles.length === 0
+                  ? "No articles available for purchase at the moment."
+                  : "No articles match your search criteria. Try adjusting your filters."}
               </p>
-              <button
-                onClick={loadArticles}
-                className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-              >
-                Refresh
-              </button>
+              {articles.length === 0 ? (
+                <button
+                  onClick={loadArticles}
+                  className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                >
+                  Refresh
+                </button>
+              ) : (
+                <button
+                  onClick={() => {
+                    setSearchTerm("");
+                    setFilterCategory("");
+                    setFilterDRMin("");
+                    setFilterDRMax("");
+                    setFilterAgeMin("");
+                    setFilterAgeMax("");
+                  }}
+                  className="mt-4 px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 transition-colors"
+                >
+                  Clear All Filters
+                </button>
+              )}
             </div>
           ) : (
-            <ArticleGrid articles={articles} onArticleUpdate={loadArticles} />
+            <ArticleGrid
+              articles={filteredArticles}
+              onArticleUpdate={loadArticles}
+            />
           )}
         </div>
       </main>

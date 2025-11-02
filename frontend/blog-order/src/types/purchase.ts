@@ -5,6 +5,15 @@ export interface PublicArticle {
   preview: string;
   availability_status: "AVAILABLE" | "SOLD_OUT" | "PROCESSING";
   domain: string;
+  domainData?: {
+    id: string;
+    name: string;
+    slug: string;
+    tags?: string;
+    categories?: string;
+    domain_age?: number;
+    domain_rating?: number;
+  };
   created_at: string;
 }
 

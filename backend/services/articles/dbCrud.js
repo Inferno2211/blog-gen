@@ -323,8 +323,13 @@ async function getBrowseArticles() {
             selected_version_id: true,
             domain: {
                 select: {
+                    id: true,
                     name: true,
-                    slug: true
+                    slug: true,
+                    tags: true,
+                    categories: true,
+                    domain_age: true,
+                    domain_rating: true
                 }
             },
             selected_version: {
@@ -427,6 +432,15 @@ function generateArticlePreview(article) {
             preview: fallbackPreview || 'Click to read this article and discover valuable insights.',
             availability_status: article.availability_status,
             domain: article.domain?.name || 'Unknown Domain',
+            domainData: article.domain ? {
+                id: article.domain.id,
+                name: article.domain.name,
+                slug: article.domain.slug,
+                tags: article.domain.tags,
+                categories: article.domain.categories,
+                domain_age: article.domain.domain_age,
+                domain_rating: article.domain.domain_rating
+            } : undefined,
             niche: article.niche,
             keyword: article.keyword,
             created_at: article.created_at,
@@ -467,6 +481,15 @@ function generateArticlePreview(article) {
         preview: preview || `Article about ${article.topic || article.niche || 'various topics'}. Click to learn more about ${article.keyword || 'this subject'}.`,
         availability_status: article.availability_status,
         domain: article.domain?.name || 'Unknown Domain',
+        domainData: article.domain ? {
+            id: article.domain.id,
+            name: article.domain.name,
+            slug: article.domain.slug,
+            tags: article.domain.tags,
+            categories: article.domain.categories,
+            domain_age: article.domain.domain_age,
+            domain_rating: article.domain.domain_rating
+        } : undefined,
         niche: article.niche,
         keyword: article.keyword,
         created_at: article.created_at,

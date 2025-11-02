@@ -747,7 +747,9 @@ async function browseDomains(req, res) {
             name: domain.name,
             slug: domain.slug,
             tags: domain.tags,
-            // You could add more public fields here if needed
+            categories: domain.categories,
+            domain_age: domain.domain_age,
+            domain_rating: domain.domain_rating
         }));
 
         res.json({
