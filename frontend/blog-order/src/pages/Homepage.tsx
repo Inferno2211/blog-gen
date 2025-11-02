@@ -4,6 +4,8 @@ import type { PublicArticle } from "../types/purchase";
 import ArticleGrid from "../components/ArticleGrid";
 import LoadingSpinner from "../components/LoadingSpinner";
 import ErrorMessage from "../components/ErrorMessage";
+import CartIcon from "../components/CartIcon";
+import ShoppingCart from "../components/ShoppingCart";
 
 export default function Homepage() {
   const [articles, setArticles] = useState<PublicArticle[]>([]);
@@ -128,9 +130,17 @@ export default function Homepage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Shopping Cart Drawer */}
+      <ShoppingCart />
+
       {/* Header */}
       <header className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+          {/* Cart Icon - Positioned absolutely in top right */}
+          <div className="absolute top-4 right-4">
+            <CartIcon />
+          </div>
+
           <div className="text-center">
             <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900 mb-2">
               Premium Content & Backlink Services

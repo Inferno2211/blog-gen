@@ -1,7 +1,15 @@
-import { useState } from 'react';
-import { X, ShoppingCart, Mail, ExternalLink, AlertCircle } from 'lucide-react';
-import type { PublicArticle } from '../types/purchase';
-import { initiatePurchase } from '../services/purchaseService';
+import { useState } from "react";
+import {
+  X,
+  ShoppingCart,
+  Mail,
+  ExternalLink,
+  AlertCircle,
+  Plus,
+} from "lucide-react";
+import type { PublicArticle } from "../types/purchase";
+import { initiatePurchase } from "../services/purchaseService";
+import { useCart } from "../contexts/CartContext";
 
 interface PurchaseModalProps {
   article: PublicArticle;
@@ -9,36 +17,45 @@ interface PurchaseModalProps {
   onComplete: () => void;
 }
 
-export default function PurchaseModal({ article, onClose, onComplete }: PurchaseModalProps) {
+export default function PurchaseModal({
+  article,
+  onClose,
+  onComplete,
+}: PurchaseModalProps) {
+  const { addToCart, isInCart } = useCart();
   const [formData, setFormData] = useState({
-    keyword: '',
-    targetUrl: '',
-    notes: '',
-    email: ''
+    keyword: "",
+    targetUrl: "",
+    notes: "",
+    email: "",
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [step, setStep] = useState<'form' | 'email-sent'>('form');
+  const [step, setStep] = useState<"form" | "email-sent">("form");
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  const articleInCart = isInCart(article.id);
+
+  const handleInputChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+  ) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
-      [name]: value
+      [name]: value,
     }));
   };
 
   const validateForm = () => {
     if (!formData.keyword.trim()) {
-      setError('Keyword/anchor text is required');
+      setError("Keyword/anchor text is required");
       return false;
     }
     if (!formData.targetUrl.trim()) {
-      setError('Target URL is required');
+      setError("Target URL is required");
       return false;
     }
     if (!formData.email.trim()) {
-      setError('Email is required');
+      setError("Email is required");
       return false;
     }
 
@@ -46,14 +63,14 @@ export default function PurchaseModal({ article, onClose, onComplete }: Purchase
     try {
       new URL(formData.targetUrl);
     } catch {
-      setError('Please enter a valid URL (including http:// or https://)');
+      setError("Please enter a valid URL (including http:// or https://)");
       return false;
     }
 
     // Basic email validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(formData.email)) {
-      setError('Please enter a valid email address');
+      setError("Please enter a valid email address");
       return false;
     }
 
@@ -70,24 +87,28 @@ export default function PurchaseModal({ article, onClose, onComplete }: Purchase
 
     try {
       setLoading(true);
-      
+
       const purchaseRequest = {
         articleId: article.id,
         keyword: formData.keyword.trim(),
         targetUrl: formData.targetUrl.trim(),
         notes: formData.notes.trim() || undefined,
-        email: formData.email.trim()
+        email: formData.email.trim(),
       };
 
       const result = await initiatePurchase(purchaseRequest);
-      
+
       if (result.success && result.data?.magicLinkSent) {
-        setStep('email-sent');
+        setStep("email-sent");
       } else {
-        setError(result.message || 'Failed to send magic link. Please try again.');
+        setError(
+          result.message || "Failed to send magic link. Please try again."
+        );
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to initiate purchase');
+      setError(
+        err instanceof Error ? err.message : "Failed to initiate purchase"
+      );
     } finally {
       setLoading(false);
     }
@@ -97,30 +118,69 @@ export default function PurchaseModal({ article, onClose, onComplete }: Purchase
     onComplete();
   };
 
+  const handleAddToCart = () => {
+    setError(null);
+
+    // Validate only backlink data (no email required for cart)
+    if (!formData.keyword.trim()) {
+      setError("Keyword/anchor text is required");
+      return;
+    }
+    if (!formData.targetUrl.trim()) {
+      setError("Target URL is required");
+      return;
+    }
+
+    // Basic URL validation
+    try {
+      new URL(formData.targetUrl);
+    } catch {
+      setError("Please enter a valid URL (including http:// or https://)");
+      return;
+    }
+
+    // Add to cart
+    const success = addToCart(article, {
+      keyword: formData.keyword.trim(),
+      targetUrl: formData.targetUrl.trim(),
+      notes: formData.notes.trim() || undefined,
+    });
+
+    if (success) {
+      onClose(); // Close modal after adding to cart
+    }
+  };
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-2 sm:p-4 z-50">
       <div className="bg-white rounded-lg max-w-2xl w-full max-h-[95vh] sm:max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between p-4 sm:p-6 border-b">
           <h2 className="text-lg sm:text-xl font-semibold text-gray-900">
-            {step === 'form' ? 'Purchase Backlink' : 'Check Your Email'}
+            {step === "form" ? "Purchase Backlink" : "Check Your Email"}
           </h2>
           <button
-            onClick={step === 'email-sent' ? handleEmailSentClose : onClose}
+            onClick={step === "email-sent" ? handleEmailSentClose : onClose}
             className="text-gray-400 hover:text-gray-600 transition-colors"
           >
             <X className="w-6 h-6" />
           </button>
         </div>
 
-        {step === 'form' ? (
+        {step === "form" ? (
           <>
             {/* Article Info */}
             <div className="p-4 sm:p-6 bg-gray-50 border-b">
-              <h3 className="font-medium text-gray-900 mb-2">{article.title}</h3>
-              <p className="text-sm text-gray-600 line-clamp-2">{article.preview}</p>
+              <h3 className="font-medium text-gray-900 mb-2">
+                {article.title}
+              </h3>
+              <p className="text-sm text-gray-600 line-clamp-2">
+                {article.preview}
+              </p>
               <div className="mt-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                <span className="text-lg font-semibold text-blue-600">$15.00</span>
+                <span className="text-lg font-semibold text-blue-600">
+                  $15.00
+                </span>
                 <button className="text-sm text-blue-600 hover:text-blue-700 flex items-center justify-center sm:justify-start">
                   <ExternalLink className="w-4 h-4 mr-1" />
                   Preview Article
@@ -142,7 +202,10 @@ export default function PurchaseModal({ article, onClose, onComplete }: Purchase
               <div className="space-y-4">
                 {/* Keyword/Anchor Text */}
                 <div>
-                  <label htmlFor="keyword" className="block text-sm font-medium text-gray-700 mb-1">
+                  <label
+                    htmlFor="keyword"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                  >
                     Keyword/Anchor Text *
                   </label>
                   <input
@@ -156,13 +219,17 @@ export default function PurchaseModal({ article, onClose, onComplete }: Purchase
                     required
                   />
                   <p className="text-xs text-gray-500 mt-1">
-                    This text will be used as the clickable anchor text for your backlink
+                    This text will be used as the clickable anchor text for your
+                    backlink
                   </p>
                 </div>
 
                 {/* Target URL */}
                 <div>
-                  <label htmlFor="targetUrl" className="block text-sm font-medium text-gray-700 mb-1">
+                  <label
+                    htmlFor="targetUrl"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                  >
                     Target URL *
                   </label>
                   <input
@@ -182,7 +249,10 @@ export default function PurchaseModal({ article, onClose, onComplete }: Purchase
 
                 {/* Email */}
                 <div>
-                  <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+                  <label
+                    htmlFor="email"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                  >
                     Email Address *
                   </label>
                   <input
@@ -202,7 +272,10 @@ export default function PurchaseModal({ article, onClose, onComplete }: Purchase
 
                 {/* Notes */}
                 <div>
-                  <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-1">
+                  <label
+                    htmlFor="notes"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                  >
                     Additional Notes (Optional)
                   </label>
                   <textarea
@@ -222,14 +295,32 @@ export default function PurchaseModal({ article, onClose, onComplete }: Purchase
                 <button
                   type="button"
                   onClick={onClose}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors order-2 sm:order-1"
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors order-3 sm:order-1"
                 >
                   Cancel
                 </button>
                 <button
+                  type="button"
+                  onClick={handleAddToCart}
+                  disabled={loading || articleInCart}
+                  className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center order-2 sm:order-2"
+                >
+                  {articleInCart ? (
+                    <>
+                      <ShoppingCart className="w-4 h-4 mr-2" />
+                      In Cart
+                    </>
+                  ) : (
+                    <>
+                      <ShoppingCart className="w-4 h-4 mr-2" />
+                      Add to Cart
+                    </>
+                  )}
+                </button>
+                <button
                   type="submit"
                   disabled={loading}
-                  className="px-6 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center order-1 sm:order-2"
+                  className="px-6 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center order-1 sm:order-3"
                 >
                   {loading ? (
                     <>
@@ -238,8 +329,8 @@ export default function PurchaseModal({ article, onClose, onComplete }: Purchase
                     </>
                   ) : (
                     <>
-                      <ShoppingCart className="w-4 h-4 mr-2" />
-                      Continue to Payment
+                      <Mail className="w-4 h-4 mr-2" />
+                      Buy Now
                     </>
                   )}
                 </button>
@@ -256,7 +347,7 @@ export default function PurchaseModal({ article, onClose, onComplete }: Purchase
               Check Your Email
             </h3>
             <p className="text-gray-600 mb-6">
-              We've sent a secure link to <strong>{formData.email}</strong>. 
+              We've sent a secure link to <strong>{formData.email}</strong>.
               Click the link in your email to complete your purchase.
             </p>
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">

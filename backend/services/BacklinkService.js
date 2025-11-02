@@ -185,31 +185,33 @@ class BacklinkService {
      * @returns {string} - The formatted prompt
      */
     _buildBacklinkIntegrationPrompt(originalContent, backlinkUrl, anchorText, qcFeedback = null) {
-        let prompt = `You are an expert content editor. Your task is to naturally integrate a backlink into the existing article content while maintaining the article's quality, flow, and readability.
+        let prompt = `You are an expert content editor. Your task is to naturally integrate a NEW backlink into the existing article content while maintaining the article's quality, flow, and readability.
 
 ORIGINAL ARTICLE CONTENT:
 ${originalContent}
 
-BACKLINK TO INTEGRATE:
+NEW BACKLINK TO INTEGRATE:
 - URL: ${backlinkUrl}
 - Anchor Text: ${anchorText}
 
-INSTRUCTIONS:
-1. Analyze the original article content and identify the most natural place to integrate the backlink
-2. The backlink should be contextually relevant and add value to the reader
-3. Integrate the link using the exact anchor text provided: "${anchorText}"
-4. The link should flow naturally within a sentence or paragraph
-5. Do not change the overall structure, tone, or main message of the article
-6. Preserve all existing frontmatter exactly as it is
-7. Do not add or remove other links unless absolutely necessary for context
-8. Ensure the integration feels organic and not forced
+CRITICAL INSTRUCTIONS:
+1. The original article already contains existing backlinks and internal links - **DO NOT REMOVE OR MODIFY THEM**
+2. Your ONLY task is to ADD the new backlink with the anchor text "${anchorText}" pointing to ${backlinkUrl}
+3. Find the most natural place in the content to integrate this NEW backlink
+4. The new backlink should be contextually relevant and add value to the reader
+5. The link should flow naturally within a sentence or paragraph
+6. **PRESERVE ALL EXISTING LINKS** - both external backlinks and internal links
+7. Preserve all existing frontmatter exactly as it is
+8. Maintain the article's original structure, tone, and main message
+9. Ensure the integration feels organic and not forced
 
 REQUIREMENTS:
 - Keep the same frontmatter structure
-- Maintain the article's original style and voice
-- The backlink must appear exactly once in the content
+- Maintain the article's original style and voice  
+- The NEW backlink must appear exactly once in the content
 - Use markdown link format: [${anchorText}](${backlinkUrl})
-- Ensure the surrounding text makes the link contextually appropriate`;
+- **DO NOT remove or modify any existing links in the original content**
+- Ensure the surrounding text makes the NEW link contextually appropriate`;
 
         // Add QC feedback if provided
         if (qcFeedback) {
@@ -223,7 +225,7 @@ Please address the above feedback while regenerating the content with the backli
 
         prompt += `
 
-Return the complete article with the backlink naturally integrated. Do not add any explanations or comments outside the article content.`;
+Return the complete article with the NEW backlink naturally integrated. Do not add any explanations or comments outside the article content.`;
 
         return prompt;
     }
@@ -293,7 +295,8 @@ Return the complete article with the backlink naturally integrated. Do not add a
                     anchorText,
                     model,
                     provider,
-                    noExternalBacklinks: false
+                    noExternalBacklinks: false,
+                    allowMultipleBacklinks: true // Allow multiple backlinks for customer integrations
                 });
 
                 console.log(`QC Result for attempt ${attempt}:`, qcResult);

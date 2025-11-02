@@ -9,9 +9,17 @@ const EmailService = require('../../EmailService');
  * Always uses the currently PUBLISHED article as the base context
  */
 async function processBacklinkIntegration(job) {
-    const { orderId, articleId, targetUrl, anchorText, notes, email, isRegeneration } = job.data;
+    // Extract fields from job data - handles both nested and flat structures
+    const { orderId, articleId, backlinkData, customerEmail, isRegeneration } = job.data;
+    
+    // Extract backlink details from nested structure
+    const targetUrl = backlinkData?.target_url || job.data.targetUrl;
+    const anchorText = backlinkData?.keyword || job.data.anchorText;
+    const notes = backlinkData?.notes || job.data.notes;
+    const email = customerEmail || job.data.email;
 
     console.log(`Processing backlink ${isRegeneration ? 'regeneration' : 'integration'} for order ${orderId}, article ${articleId}`);
+    console.log(`Backlink details: URL=${targetUrl}, Anchor="${anchorText}", Email=${email}`);
 
     try {
         // Update order status to processing

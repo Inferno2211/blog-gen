@@ -233,6 +233,9 @@ class PurchaseService {
                 const StripeService = require('./StripeService');
                 const stripeService = new StripeService();
                 
+                // Check if this is a bulk purchase
+                const isBulkPurchase = session.purchase_type === 'BACKLINK' && session.cart_items && session.cart_items.length > 0;
+                
                 // Check if session already has a valid Stripe session
                 if (session.stripe_session_id) {
                     console.log(`Session ${session.id} authenticated with existing Stripe session`);
@@ -240,17 +243,30 @@ class PurchaseService {
                     try {
                         const stripeSession = await stripeService.verifyCheckoutSession(session.stripe_session_id);
                         if (stripeSession.payment_status === 'unpaid') {
-                            return {
-                                valid: true,
-                                sessionData: {
-                                    sessionId: session.id,
-                                    email: session.email,
-                                    article_id: session.article_id,
-                                    backlink_data: session.backlink_data,
-                                    articleTitle: session.article.slug
-                                },
-                                stripeCheckoutUrl: `https://checkout.stripe.com/pay/${session.stripe_session_id}`
-                            };
+                            if (isBulkPurchase) {
+                                return {
+                                    valid: true,
+                                    sessionData: {
+                                        sessionId: session.id,
+                                        email: session.email,
+                                        cart_items: session.cart_items,
+                                        purchase_type: session.purchase_type
+                                    },
+                                    stripeCheckoutUrl: `https://checkout.stripe.com/pay/${session.stripe_session_id}`
+                                };
+                            } else {
+                                return {
+                                    valid: true,
+                                    sessionData: {
+                                        sessionId: session.id,
+                                        email: session.email,
+                                        article_id: session.article_id,
+                                        backlink_data: session.backlink_data,
+                                        articleTitle: session.article?.slug || 'Unknown Article'
+                                    },
+                                    stripeCheckoutUrl: `https://checkout.stripe.com/pay/${session.stripe_session_id}`
+                                };
+                            }
                         }
                     } catch (stripeError) {
                         console.log(`Stripe session ${session.stripe_session_id} invalid, will create new one`);
@@ -261,24 +277,69 @@ class PurchaseService {
                 console.log(`Creating Stripe checkout session for session ${session.id}`);
                 
                 try {
-                    const checkoutSession = await stripeService.createCheckoutSession(session.id, {
-                        article_id: session.article_id,
-                        backlink_data: session.backlink_data,
-                        email: session.email,
-                        type: session.backlink_data?.type === 'ARTICLE_GENERATION' ? 'article_generation' : 'backlink'
-                    });
+                    let checkoutSession;
                     
-                    return {
-                        valid: true,
-                        sessionData: {
-                            sessionId: session.id,
-                            email: session.email,
+                    if (isBulkPurchase) {
+                        // For bulk purchases, prepare cart items with article details
+                        const cartItems = await Promise.all(
+                            session.cart_items.map(async (item) => {
+                                const article = await prisma.article.findUnique({
+                                    where: { id: item.articleId },
+                                    include: { domain: true }
+                                });
+                                
+                                if (!article) {
+                                    throw new Error(`Article ${item.articleId} not found`);
+                                }
+                                
+                                return {
+                                    articleId: item.articleId,
+                                    articleTitle: article.topic || article.keyword || article.slug,
+                                    domainName: article.domain.name,
+                                    backlinkData: item.backlinkData
+                                };
+                            })
+                        );
+                        
+                        checkoutSession = await stripeService.createBulkCheckoutSession(
+                            session.id,
+                            cartItems,
+                            session.email
+                        );
+                    } else {
+                        // Single article purchase
+                        checkoutSession = await stripeService.createCheckoutSession(session.id, {
                             article_id: session.article_id,
                             backlink_data: session.backlink_data,
-                            articleTitle: session.article.slug
-                        },
-                        stripeCheckoutUrl: checkoutSession.url
-                    };
+                            email: session.email,
+                            type: session.backlink_data?.type === 'ARTICLE_GENERATION' ? 'article_generation' : 'backlink'
+                        });
+                    }
+                    
+                    if (isBulkPurchase) {
+                        return {
+                            valid: true,
+                            sessionData: {
+                                sessionId: session.id,
+                                email: session.email,
+                                cart_items: session.cart_items,
+                                purchase_type: session.purchase_type
+                            },
+                            stripeCheckoutUrl: checkoutSession.url
+                        };
+                    } else {
+                        return {
+                            valid: true,
+                            sessionData: {
+                                sessionId: session.id,
+                                email: session.email,
+                                article_id: session.article_id,
+                                backlink_data: session.backlink_data,
+                                articleTitle: session.article?.slug || 'Unknown Article'
+                            },
+                            stripeCheckoutUrl: checkoutSession.url
+                        };
+                    }
                 } catch (stripeError) {
                     console.error(`Failed to create Stripe checkout session:`, stripeError);
                     return { valid: false, error: 'Failed to create payment session' };
@@ -287,16 +348,31 @@ class PurchaseService {
 
             console.log(`Session verified - Session: ${session.id}, Email: ${session.email}`);
 
-            return {
-                valid: true,
-                sessionData: {
-                    sessionId: session.id,
-                    email: session.email,
-                    article_id: session.article_id,
-                    backlink_data: session.backlink_data,
-                    articleTitle: session.article.slug
-                }
-            };
+            // Return session data based on type
+            const isBulkPurchase = session.purchase_type === 'BACKLINK' && session.cart_items && session.cart_items.length > 0;
+            
+            if (isBulkPurchase) {
+                return {
+                    valid: true,
+                    sessionData: {
+                        sessionId: session.id,
+                        email: session.email,
+                        cart_items: session.cart_items,
+                        purchase_type: session.purchase_type
+                    }
+                };
+            } else {
+                return {
+                    valid: true,
+                    sessionData: {
+                        sessionId: session.id,
+                        email: session.email,
+                        article_id: session.article_id,
+                        backlink_data: session.backlink_data,
+                        articleTitle: session.article?.slug || 'Unknown Article'
+                    }
+                };
+            }
         } catch (error) {
             console.error('Failed to verify session:', error);
             return { valid: false, error: 'Failed to verify session' };
@@ -1344,6 +1420,430 @@ class PurchaseService {
             default:
                 return null;
         }
+    }
+
+    // ============================================================================
+    // MULTI-PURCHASE METHODS (NEW)
+    // ============================================================================
+
+    /**
+     * Initiate bulk purchase for multiple articles
+     * @param {Array<{articleId: string, keyword: string, targetUrl: string, notes?: string}>} cartItems - Array of article purchases
+     * @param {string} email - Customer email
+     * @returns {Promise<{sessionId: string, magicLinkToken: string, cartSize: number}>}
+     */
+    async initiateBulkPurchase(cartItems, email) {
+        // Validate inputs
+        if (!Array.isArray(cartItems) || cartItems.length === 0) {
+            throw new Error('Cart items must be a non-empty array');
+        }
+
+        if (cartItems.length > 20) {
+            throw new Error('Maximum 20 articles per purchase');
+        }
+
+        // Validate email
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) {
+            throw new Error('Invalid email format');
+        }
+
+        // Normalize cart items to handle both flat and nested structure
+        const normalizedCartItems = cartItems.map(item => {
+            // Support both flat (keyword, targetUrl) and nested (backlinkData.keyword)
+            const keyword = item.keyword || item.backlinkData?.keyword;
+            const targetUrl = item.targetUrl || item.backlinkData?.targetUrl;
+            const notes = item.notes || item.backlinkData?.notes || '';
+
+            return {
+                articleId: item.articleId,
+                keyword,
+                targetUrl,
+                notes
+            };
+        });
+
+        // Validate each normalized cart item
+        for (const item of normalizedCartItems) {
+            if (!item.articleId || !item.keyword || !item.targetUrl) {
+                throw new Error('Each cart item must have articleId, keyword, and targetUrl');
+            }
+
+            // Validate target URL
+            try {
+                new URL(item.targetUrl);
+            } catch {
+                throw new Error(`Invalid target URL: ${item.targetUrl}`);
+            }
+        }
+
+        // Check for duplicate articles in cart
+        const articleIds = normalizedCartItems.map(item => item.articleId);
+        const uniqueIds = new Set(articleIds);
+        if (uniqueIds.size !== articleIds.length) {
+            throw new Error('Cart contains duplicate articles');
+        }
+
+        try {
+            // Check all articles are available (atomic check)
+            await this._validateBulkArticleAvailability(articleIds);
+
+            // Prepare cart items data
+            const cartItemsData = normalizedCartItems.map(item => ({
+                articleId: item.articleId,
+                backlinkData: {
+                    keyword: item.keyword,
+                    target_url: item.targetUrl,
+                    notes: item.notes || ''
+                }
+            }));
+
+            // Create purchase session with cart_items
+            const magicLinkToken = this._generateMagicLinkToken();
+            const magicLinkExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
+            const session = await prisma.purchaseSession.create({
+                data: {
+                    email: email.toLowerCase().trim(),
+                    cart_items: cartItemsData,
+                    purchase_type: 'BACKLINK',
+                    status: 'PENDING_AUTH',
+                    magic_link_token: magicLinkToken,
+                    magic_link_expires: magicLinkExpires
+                }
+            });
+
+            // Reserve all articles atomically
+            await this._reserveArticles(articleIds);
+
+            console.log(`Bulk purchase initiated - Session: ${session.id}, Articles: ${articleIds.length}, Email: ${email}`);
+
+            return {
+                sessionId: session.id,
+                magicLinkToken: magicLinkToken,
+                cartSize: normalizedCartItems.length
+            };
+
+        } catch (error) {
+            console.error('Failed to initiate bulk purchase:', error);
+            throw new Error(`Failed to initiate bulk purchase: ${error.message}`);
+        }
+    }
+
+    /**
+     * Complete bulk payment and create multiple orders
+     * @param {string} sessionId - Purchase session ID
+     * @param {string} stripeSessionId - Stripe checkout session ID
+     * @param {Object} paymentData - Payment details from Stripe
+     * @returns {Promise<{orders: Array<{orderId: string, articleId: string, status: string}>}>}
+     */
+    async completeBulkPayment(sessionId, stripeSessionId, paymentData) {
+        try {
+            // Fetch purchase session with cart items
+            const session = await prisma.purchaseSession.findUnique({
+                where: { id: sessionId },
+                include: { orders: true }
+            });
+
+            if (!session) {
+                throw new Error('Purchase session not found');
+            }
+
+            if (!session.cart_items || session.cart_items.length === 0) {
+                throw new Error('Session has no cart items');
+            }
+
+            // Update session status to PAID
+            await prisma.purchaseSession.update({
+                where: { id: sessionId },
+                data: {
+                    status: 'PAID',
+                    stripe_session_id: stripeSessionId,
+                    updated_at: new Date()
+                }
+            });
+
+            // Create one order per cart item
+            const orders = [];
+            const cartItems = session.cart_items;
+
+            for (const cartItem of cartItems) {
+                const order = await prisma.order.create({
+                    data: {
+                        session_id: sessionId,
+                        article_id: cartItem.articleId,
+                        customer_email: session.email,
+                        backlink_data: cartItem.backlinkData,
+                        payment_data: {
+                            stripe_session_id: stripeSessionId,
+                            amount: paymentData.amount_per_item || 1500, // $15 per backlink
+                            currency: paymentData.currency || 'usd',
+                            status: 'paid',
+                            paid_at: new Date().toISOString()
+                        },
+                        status: 'PROCESSING'
+                    }
+                });
+
+                orders.push({
+                    orderId: order.id,
+                    articleId: cartItem.articleId,
+                    status: order.status
+                });
+            }
+
+            console.log(`Bulk payment completed - Session: ${sessionId}, Orders created: ${orders.length}`);
+
+            return { orders };
+
+        } catch (error) {
+            console.error('Failed to complete bulk payment:', error);
+            throw new Error(`Failed to complete bulk payment: ${error.message}`);
+        }
+    }
+
+    /**
+     * Get cart details for a session
+     * @param {string} sessionId - Purchase session ID
+     * @returns {Promise<{sessionId: string, email: string, cartItems: Array, totalPrice: number}>}
+     */
+    async getCartDetails(sessionId) {
+        try {
+            const session = await prisma.purchaseSession.findUnique({
+                where: { id: sessionId }
+            });
+
+            if (!session) {
+                throw new Error('Purchase session not found');
+            }
+
+            if (!session.cart_items || session.cart_items.length === 0) {
+                throw new Error('Cart is empty');
+            }
+
+            // Fetch article details for each cart item
+            const cartItemsWithDetails = await Promise.all(
+                session.cart_items.map(async (item) => {
+                    const article = await prisma.article.findUnique({
+                        where: { id: item.articleId },
+                        include: {
+                            domain: true,
+                            selected_version: true
+                        }
+                    });
+
+                    if (!article) {
+                        return null; // Article might have been deleted
+                    }
+
+                    // Get article preview
+                    let preview = '';
+                    if (article.selected_version && article.selected_version.content_md) {
+                        preview = this._extractPreview(article.selected_version.content_md);
+                    }
+
+                    return {
+                        articleId: item.articleId,
+                        article: {
+                            id: article.id,
+                            slug: article.slug,
+                            title: article.topic || article.keyword || 'Untitled Article',
+                            preview: preview,
+                            availability_status: article.availability_status,
+                            domain: article.domain?.slug || 'Unknown',
+                            domainData: article.domain ? {
+                                id: article.domain.id,
+                                name: article.domain.name,
+                                slug: article.domain.slug,
+                                domain_rating: article.domain.domain_rating,
+                                domain_age: article.domain.domain_age,
+                                categories: article.domain.categories
+                            } : null
+                        },
+                        backlinkData: item.backlinkData
+                    };
+                })
+            );
+
+            // Filter out null items (deleted articles)
+            const validCartItems = cartItemsWithDetails.filter(item => item !== null);
+
+            // Calculate total price ($15 per backlink)
+            const totalPrice = validCartItems.length * 15;
+
+            return {
+                sessionId: session.id,
+                email: session.email,
+                cartItems: validCartItems,
+                totalPrice: totalPrice,
+                status: session.status,
+                createdAt: session.created_at
+            };
+
+        } catch (error) {
+            console.error('Failed to get cart details:', error);
+            throw new Error(`Failed to get cart details: ${error.message}`);
+        }
+    }
+
+    /**
+     * Get bulk order status for all orders in a session
+     * @param {string} sessionId - Purchase session ID
+     * @returns {Promise<{sessionId: string, orders: Array, totalOrders: number, completedOrders: number, failedOrders: number}>}
+     */
+    async getBulkOrderStatus(sessionId) {
+        try {
+            const session = await prisma.purchaseSession.findUnique({
+                where: { id: sessionId },
+                include: {
+                    orders: {
+                        include: {
+                            article: {
+                                include: {
+                                    domain: true
+                                }
+                            },
+                            version: true
+                        },
+                        orderBy: { created_at: 'asc' }
+                    }
+                }
+            });
+
+            if (!session) {
+                throw new Error('Purchase session not found');
+            }
+
+            // Map orders with detailed info
+            const orders = session.orders.map(order => ({
+                id: order.id,
+                article_id: order.article_id,
+                status: order.status,
+                created_at: order.created_at,
+                completed_at: order.completed_at,
+                article: {
+                    id: order.article?.id,
+                    title: order.article?.topic || order.article?.keyword || 'Untitled',
+                    domain: order.article?.domain?.slug || 'Unknown'
+                },
+                backlink_data: order.backlink_data ? {
+                    keyword: order.backlink_data.keyword,
+                    target_url: order.backlink_data.target_url,
+                    notes: order.backlink_data.notes
+                } : undefined
+            }));
+
+            // Calculate statistics - use snake_case to match frontend expectations
+            const totalOrders = orders.length;
+            const completedOrders = orders.filter(o => o.status === 'COMPLETED').length;
+            const failedOrders = orders.filter(o => o.status === 'FAILED' || o.status === 'REFUNDED').length;
+            const processingOrders = orders.filter(o => o.status === 'PROCESSING').length;
+            const qualityCheckOrders = orders.filter(o => o.status === 'QUALITY_CHECK').length;
+            const adminReviewOrders = orders.filter(o => o.status === 'ADMIN_REVIEW').length;
+
+            return {
+                session: {
+                    id: session.id,
+                    email: session.email,
+                    purchase_type: session.purchase_type,
+                    status: session.status,
+                    created_at: session.created_at
+                },
+                orders: orders,
+                statistics: {
+                    total: totalOrders,
+                    processing: processingOrders,
+                    quality_check: qualityCheckOrders,
+                    admin_review: adminReviewOrders,
+                    completed: completedOrders,
+                    failed: failedOrders
+                }
+            };
+
+        } catch (error) {
+            console.error('Failed to get bulk order status:', error);
+            throw new Error(`Failed to get bulk order status: ${error.message}`);
+        }
+    }
+
+    /**
+     * Validate multiple articles are available (atomic check)
+     * @private
+     * @param {Array<string>} articleIds - Array of article IDs
+     */
+    async _validateBulkArticleAvailability(articleIds) {
+        const articles = await prisma.article.findMany({
+            where: {
+                id: { in: articleIds }
+            },
+            select: {
+                id: true,
+                availability_status: true,
+                topic: true,
+                keyword: true
+            }
+        });
+
+        if (articles.length !== articleIds.length) {
+            throw new Error('One or more articles not found');
+        }
+
+        const unavailableArticles = articles.filter(a => a.availability_status !== 'AVAILABLE');
+        if (unavailableArticles.length > 0) {
+            const titles = unavailableArticles.map(a => a.topic || a.keyword || a.id).join(', ');
+            throw new Error(`The following articles are not available: ${titles}`);
+        }
+    }
+
+    /**
+     * Reserve multiple articles atomically (for bulk purchase)
+     * @private
+     * @param {Array<string>} articleIds - Array of article IDs
+     */
+    async _reserveArticles(articleIds) {
+        return await prisma.$transaction(async (tx) => {
+            for (const id of articleIds) {
+                const article = await tx.article.findUnique({
+                    where: { id },
+                    select: { availability_status: true }
+                });
+
+                if (!article) {
+                    throw new Error(`Article ${id} not found`);
+                }
+
+                if (article.availability_status !== 'AVAILABLE') {
+                    throw new Error(`Article ${id} is not available`);
+                }
+
+                await tx.article.update({
+                    where: { id },
+                    data: {
+                        availability_status: 'PROCESSING',
+                        pending_backlink_count: { increment: 1 }
+                    }
+                });
+            }
+        });
+    }
+
+    /**
+     * Release reserved articles (rollback on payment failure)
+     * @private
+     * @param {Array<string>} articleIds - Array of article IDs
+     */
+    async _releaseArticles(articleIds) {
+        return await prisma.$transaction(async (tx) => {
+            for (const id of articleIds) {
+                await tx.article.update({
+                    where: { id },
+                    data: {
+                        availability_status: 'AVAILABLE',
+                        pending_backlink_count: { decrement: 1 }
+                    }
+                });
+            }
+        });
     }
 }
 

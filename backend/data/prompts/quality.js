@@ -14,11 +14,11 @@ Evaluate the article (provided below) across the following criteria:
    - Are there any **long-tail variations** or semantically related terms used?
 
 2. **Backlink Quality**
-   - Is there exactly **one** backlink?
-   - Is it **relevant to the topic** and naturally embedded (not spammy)?
+   - **Important**: Each unique URL should appear only ONCE (no duplicate links to the same URL)
+   - Is the backlink **relevant to the topic** and naturally embedded (not spammy)?
    - Does the **anchor text** look organic?
    - Is the backlink contextually placed (not stuffed in a random sentence)?
-   - Ensure the link {BACKLINK_URL} with anchor text {BACKLINK_ANCHOR_TEXT} is present
+   - Ensure the link {BACKLINK_URL} with anchor text {BACKLINK_ANCHOR_TEXT} is present (if specified)
 
 
 

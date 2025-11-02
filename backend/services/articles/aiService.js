@@ -78,7 +78,7 @@ async function generateMarkdown({ niche, keyword, topic, n, targetURL, anchorTex
  * @param {Object} params - { backlinkUrl, anchorText, model, provider, maxRetries, noExternalBacklinks, expectedInternalSlugs }
  * @returns {Promise<Object>} - QC result as JSON
  */
-async function runQC(articleText, { backlinkUrl, anchorText, model = 'gemini-2.5-flash', provider = 'gemini', maxRetries = 3, noExternalBacklinks = false, expectedInternalSlugs = [] } = {}) {
+async function runQC(articleText, { backlinkUrl, anchorText, model = 'gemini-2.5-flash', provider = 'gemini', maxRetries = 3, noExternalBacklinks = false, expectedInternalSlugs = [], allowMultipleBacklinks = false } = {}) {
     let attempt = 0;
     let lastError;
 
@@ -90,6 +90,11 @@ async function runQC(articleText, { backlinkUrl, anchorText, model = 'gemini-2.5
     // Adjust guidance when external backlinks are disallowed
     if (noExternalBacklinks) {
         prompt += `\n\nAdditional Instructions:\n- For this article, external/offsite backlinks are NOT allowed.\n- Ignore the requirement to include a backlink.\n- If any external link appears, list it as an issue and set flags.missing_backlink = false and fail the article.\n`;
+    }
+
+    // Adjust guidance when multiple backlinks are allowed (customer backlink integration)
+    if (allowMultipleBacklinks) {
+        prompt += `\n\nMultiple Backlinks Allowed:\n- This article is being updated with a CUSTOMER backlink integration.\n- The article may contain MULTIPLE external backlinks (original + new customer backlink).\n- **DO NOT flag or fail the article for having multiple external backlinks**.\n- Only verify that the SPECIFIC backlink with URL "${backlinkUrl}" and anchor text "${anchorText}" is present.\n- Existing backlinks should remain unchanged and are acceptable.\n- Focus on content quality, naturalness, and proper integration of the new backlink.\n`;
     }
 
     if (Array.isArray(expectedInternalSlugs) && expectedInternalSlugs.length > 0) {

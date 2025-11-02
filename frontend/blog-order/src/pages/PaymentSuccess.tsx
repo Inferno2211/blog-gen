@@ -33,12 +33,26 @@ export default function PaymentSuccess() {
 
       const response = await completePurchase(sessionId, stripeSessionId);
 
-      if (response.success && response.data.orderId) {
-        setOrderId(response.data.orderId);
-        // Redirect to order status page where customer can see progress
-        setTimeout(() => {
-          navigate(`/order-status?order_id=${response.data.orderId}`);
-        }, 3000);
+      // Handle both single and bulk purchases
+      if (response.success) {
+        // Check if this is a bulk purchase
+        if (response.data.orders && Array.isArray(response.data.orders)) {
+          // Bulk purchase - redirect to bulk order status page
+          console.log(
+            `Bulk purchase completed: ${response.data.orders.length} orders`
+          );
+          setTimeout(() => {
+            navigate(`/bulk-order-status?session_id=${sessionId}`);
+          }, 3000);
+        } else if (response.data.orderId) {
+          // Single purchase - redirect to single order status page
+          setOrderId(response.data.orderId);
+          setTimeout(() => {
+            navigate(`/order-status?order_id=${response.data.orderId}`);
+          }, 3000);
+        } else {
+          setError("Failed to complete order - invalid response format");
+        }
       } else {
         setError("Failed to complete order");
       }

@@ -5,9 +5,14 @@ const purchaseController = require('../../../controllers/v1/purchase/purchase.co
 // Purchase workflow endpoints
 router.post('/initiate', purchaseController.initiatePurchase);
 router.post('/initiate-article', purchaseController.initiateArticlePurchase);
+router.post('/initiate-bulk', purchaseController.initiateBulkPurchase); // NEW: Bulk purchase
 router.post('/verify-session', purchaseController.verifySession);
 router.post('/complete', purchaseController.completePayment);
 router.get('/status/:orderId', purchaseController.getOrderStatus);
+
+// Cart and bulk order endpoints (NEW)
+router.get('/cart/:sessionId', purchaseController.getCartDetails);
+router.get('/bulk-status/:sessionId', purchaseController.getBulkOrderStatus);
 
 // Customer backlink configuration endpoints
 router.get('/order/:orderId', purchaseController.getOrderDetails);

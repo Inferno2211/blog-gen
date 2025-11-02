@@ -191,6 +191,22 @@ class StripeService {
         throw new AppError('Purchase session not found', 404, 'SESSION_NOT_FOUND');
       }
 
+      // IDEMPOTENCY CHECK: If order already exists for this session, return existing order
+      const existingOrderCheck = await this.prisma.order.findFirst({
+        where: { session_id: purchaseSessionId }
+      });
+
+      if (existingOrderCheck) {
+        console.log(`⚠️ DUPLICATE WEBHOOK: Order already exists for session ${purchaseSessionId}, returning existing order`);
+        return {
+          orderId: existingOrderCheck.id,
+          sessionId: purchaseSessionId,
+          amount: session.amount_total,
+          currency: session.currency,
+          status: existingOrderCheck.status
+        };
+      }
+
       // Determine if this is article generation or backlink order
       const isArticleGeneration = session.metadata.type === 'article_generation';
       
@@ -225,6 +241,7 @@ class StripeService {
           article_id: articleId,
           customer_email: session.customer_email,
           backlink_data: backlinkData,
+          stripe_session_id: stripeSessionId, // Add direct field for idempotency
           payment_data: {
             stripe_session_id: stripeSessionId,
             amount: session.amount_total,
@@ -421,26 +438,31 @@ class StripeService {
   async handleCheckoutCompleted(session) {
     try {
       const purchaseSessionId = session.metadata.purchase_session_id;
+      const orderType = session.metadata.type || 'backlink'; // Default to 'backlink' for backward compatibility
       
       if (!purchaseSessionId) {
         console.warn('No purchase session ID in checkout session metadata');
         return { handled: false, reason: 'No purchase session ID' };
       }
 
-      // Process payment success
-      const result = await this.processPaymentSuccess(session.id);
-      
-      console.log(`Checkout completed for session ${purchaseSessionId}, order ${result.orderId}`);
-      
-      return { 
-        handled: true, 
-        orderId: result.orderId,
-        sessionId: purchaseSessionId 
-      };
+      // Check if this is a bulk purchase
+      const isBulkPurchase = orderType === 'bulk_backlink';
+
+      if (isBulkPurchase) {
+        // Process bulk payment
+        console.log(`Processing bulk payment for session ${purchaseSessionId}`);
+        const result = await this.processBulkPaymentSuccess(session.id);
+        return { handled: true, type: 'bulk_purchase', orderCount: result.orders.length };
+      } else {
+        // Process single article payment (existing logic)
+        console.log(`Processing single payment for session ${purchaseSessionId}`);
+        const result = await this.processPaymentSuccess(session.id);
+        return { handled: true, type: 'single_purchase', orderId: result.orderId };
+      }
 
     } catch (error) {
       console.error('Error handling checkout completed:', error);
-      throw error;
+      throw new AppError('Failed to handle checkout completion', 'CHECKOUT_HANDLING_ERROR');
     }
   }
 
@@ -561,6 +583,231 @@ class StripeService {
     } catch (error) {
       console.error('Error getting payment status:', error);
       throw new AppError('Failed to get payment status', 500, 'PAYMENT_STATUS_ERROR');
+    }
+  }
+
+  /**
+   * Create bulk checkout session with multiple line items for cart
+   * @param {string} sessionId - Purchase session ID
+   * @param {Array<{articleId, articleTitle, domainName, backlinkData}>} cartItems - Cart items with article details
+   * @param {string} email - Customer email
+   * @returns {Promise<{sessionId: string, url: string, expiresAt: number}>}
+   */
+  async createBulkCheckoutSession(sessionId, cartItems, email) {
+    try {
+      if (!Array.isArray(cartItems) || cartItems.length === 0) {
+        throw new AppError('Cart items must be a non-empty array', 400, 'INVALID_CART');
+      }
+
+      if (cartItems.length > 20) {
+        throw new AppError('Maximum 20 articles per purchase', 400, 'CART_TOO_LARGE');
+      }
+
+      // Create line items for each article in cart
+      const lineItems = cartItems.map((item, index) => ({
+        price_data: {
+          currency: this.CURRENCY,
+          product_data: {
+            name: `Backlink Placement - ${item.articleTitle}`,
+            description: `Domain: ${item.domainName} | Keyword: "${item.backlinkData.keyword}"`,
+            metadata: {
+              article_id: item.articleId,
+              cart_index: index,
+              keyword: item.backlinkData.keyword,
+              target_url: item.backlinkData.target_url
+            }
+          },
+          unit_amount: this.BACKLINK_PRICE // $15 per backlink
+        },
+        quantity: 1
+      }));
+
+      // Create Stripe checkout session
+      const checkoutSession = await this.stripe.checkout.sessions.create({
+        payment_method_types: ['card'],
+        line_items: lineItems,
+        mode: 'payment',
+        success_url: `${process.env.FRONTEND_URL}/payment/success?stripe_session_id={CHECKOUT_SESSION_ID}&session_id=${sessionId}`,
+        cancel_url: `${process.env.FRONTEND_URL}/purchase/cancel?session_id=${sessionId}`,
+        customer_email: email,
+        metadata: {
+          purchase_session_id: sessionId,
+          cart_size: cartItems.length,
+          type: 'bulk_backlink',
+          article_ids: cartItems.map(item => item.articleId).join(',')
+        },
+        expires_at: Math.floor(Date.now() / 1000) + (30 * 60) // 30 minutes
+      });
+
+      // Update purchase session with Stripe session ID
+      await this.prisma.purchaseSession.update({
+        where: { id: sessionId },
+        data: {
+          stripe_session_id: checkoutSession.id,
+          status: 'PAYMENT_PENDING',
+          updated_at: new Date()
+        }
+      });
+
+      console.log(`Bulk checkout session created: ${checkoutSession.id} for ${cartItems.length} articles`);
+
+      return {
+        sessionId: checkoutSession.id,
+        url: checkoutSession.url,
+        expiresAt: checkoutSession.expires_at
+      };
+
+    } catch (error) {
+      console.error('Error creating bulk checkout session:', error);
+      throw new AppError('Failed to create bulk checkout session', 500, 'BULK_CHECKOUT_ERROR');
+    }
+  }
+
+  /**
+   * Process bulk payment completion (webhook handler helper)
+   * @param {string} stripeSessionId - Stripe checkout session ID
+   * @returns {Promise<{sessionId: string, orders: Array}>}
+   */
+  async processBulkPaymentSuccess(stripeSessionId) {
+    try {
+      const session = await this.verifyCheckoutSession(stripeSessionId);
+
+      if (session.payment_status !== 'paid') {
+        throw new AppError('Payment not completed', 400, 'PAYMENT_NOT_COMPLETED');
+      }
+
+      const purchaseSessionId = session.metadata.purchase_session_id;
+      const cartSize = parseInt(session.metadata.cart_size || '0');
+
+      if (!purchaseSessionId) {
+        throw new AppError('Purchase session ID not found in payment metadata', 400, 'SESSION_ID_MISSING');
+      }
+
+      // Fetch purchase session
+      const purchaseSession = await this.prisma.purchaseSession.findUnique({
+        where: { id: purchaseSessionId }
+      });
+
+      if (!purchaseSession) {
+        throw new AppError('Purchase session not found', 404, 'SESSION_NOT_FOUND');
+      }
+
+      // IDEMPOTENCY CHECK 1: Check by Stripe session ID (more reliable for webhooks)
+      const existingOrdersByStripe = await this.prisma.order.findMany({
+        where: { stripe_session_id: stripeSessionId }
+      });
+
+      if (existingOrdersByStripe.length > 0) {
+        console.log(`⚠️ DUPLICATE WEBHOOK: Orders already exist for Stripe session ${stripeSessionId}, returning existing orders`);
+        return {
+          sessionId: purchaseSessionId,
+          orders: existingOrdersByStripe.map(o => ({
+            orderId: o.id,
+            articleId: o.article_id,
+            status: o.status
+          }))
+        };
+      }
+
+      // IDEMPOTENCY CHECK 2: Fallback check by purchase session
+      const existingOrders = await this.prisma.order.findMany({
+        where: { session_id: purchaseSessionId }
+      });
+
+      if (existingOrders.length > 0) {
+        console.log(`⚠️ DUPLICATE WEBHOOK: Orders already exist for session ${purchaseSessionId}, returning existing orders`);
+        return {
+          sessionId: purchaseSessionId,
+          orders: existingOrders.map(o => ({
+            orderId: o.id,
+            articleId: o.article_id,
+            status: o.status
+          }))
+        };
+      }
+
+      // Update session status to PAID
+      await this.prisma.purchaseSession.update({
+        where: { id: purchaseSessionId },
+        data: {
+          status: 'PAID',
+          updated_at: new Date()
+        }
+      });
+
+      // Create orders for each cart item
+      const cartItems = purchaseSession.cart_items || [];
+      const orders = [];
+
+      const amountPerItem = Math.floor(session.amount_total / cartSize); // Divide total by number of items
+
+      for (let i = 0; i < cartItems.length; i++) {
+        const cartItem = cartItems[i];
+
+        try {
+          const order = await this.prisma.order.create({
+            data: {
+              session_id: purchaseSessionId,
+              article_id: cartItem.articleId,
+              customer_email: session.customer_email,
+              backlink_data: cartItem.backlinkData,
+              stripe_session_id: stripeSessionId, // Add direct field for idempotency
+              payment_data: {
+                stripe_session_id: stripeSessionId,
+                amount: amountPerItem,
+                currency: session.currency,
+                status: 'paid',
+                payment_intent: session.payment_intent,
+                cart_index: i
+              },
+              status: 'PROCESSING'
+            }
+          });
+
+          // Add backlink integration job to queue
+          await this.queueService.addBacklinkIntegrationJob({
+            orderId: order.id,
+            articleId: cartItem.articleId,
+            backlinkData: cartItem.backlinkData,
+            customerEmail: session.customer_email
+          });
+
+          orders.push(order);
+        } catch (orderError) {
+          // Check if it's a unique constraint violation (duplicate order)
+          if (orderError.code === 'P2002') {
+            console.log(`⚠️ DUPLICATE ORDER: Order for article ${cartItem.articleId} already exists for Stripe session ${stripeSessionId}, skipping`);
+            // Fetch existing order
+            const existingOrder = await this.prisma.order.findFirst({
+              where: {
+                stripe_session_id: stripeSessionId,
+                article_id: cartItem.articleId
+              }
+            });
+            if (existingOrder) {
+              orders.push(existingOrder);
+            }
+          } else {
+            // Re-throw other errors
+            throw orderError;
+          }
+        }
+      }
+
+      console.log(`Bulk payment processed: ${orders.length} orders created for session ${purchaseSessionId}`);
+
+      return {
+        sessionId: purchaseSessionId,
+        orders: orders.map(o => ({
+          orderId: o.id,
+          articleId: o.article_id,
+          status: o.status
+        }))
+      };
+
+    } catch (error) {
+      console.error('Error processing bulk payment:', error);
+      throw new AppError('Failed to process bulk payment', 500, 'BULK_PAYMENT_PROCESSING_ERROR');
     }
   }
 }

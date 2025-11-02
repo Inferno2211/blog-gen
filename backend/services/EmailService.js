@@ -176,6 +176,9 @@ class EmailService {
    * @private
    */
   _generateMagicLinkTemplate(magicLinkUrl, sessionData) {
+    const isBulkPurchase = sessionData.type === 'bulk_backlink';
+    const isArticleGeneration = sessionData.type === 'article_generation';
+    
     return `
       <!DOCTYPE html>
       <html>
@@ -198,7 +201,13 @@ class EmailService {
         
         <p>Hello!</p>
         
-        <p>You've initiated a purchase for ${sessionData.type === 'article_generation' ? 'a custom article generation' : 'an article backlink'}. To complete your order, please click the secure link below:</p>
+        <p>You've initiated a purchase for ${
+          isBulkPurchase 
+            ? `${sessionData.cartSize} article backlinks` 
+            : isArticleGeneration 
+              ? 'a custom article generation' 
+              : 'an article backlink'
+        }. To complete your order, please click the secure link below:</p>
         
         <div style="text-align: center;">
           <a href="${magicLinkUrl}" class="button">Complete Your Purchase</a>
@@ -210,7 +219,11 @@ class EmailService {
         
         <p><strong>Order Details:</strong></p>
         <ul>
-          ${sessionData.type === 'article_generation' ? `
+          ${isBulkPurchase ? `
+            <li><strong>Items:</strong> ${sessionData.cartSize} article backlinks</li>
+            <li><strong>Price per backlink:</strong> $15.00</li>
+            <li><strong>Total Price:</strong> $${(sessionData.cartSize * 15).toFixed(2)}</li>
+          ` : isArticleGeneration ? `
             <li><strong>Article Title:</strong> ${sessionData.articleTitle || 'Custom Article'}</li>
             <li><strong>Domain:</strong> ${sessionData.domainName || 'Selected Domain'}</li>
             <li><strong>Service:</strong> Custom Article Generation</li>
@@ -702,6 +715,211 @@ class EmailService {
         
         <div class="footer">
           <p>If you have urgent questions, please contact support and reference order ID: ${failureData.orderId}</p>
+          <p>This is an automated email. Please do not reply to this message.</p>
+        </div>
+      </body>
+      </html>
+    `;
+  }
+
+  /**
+   * Send bulk purchase confirmation email
+   * @param {string} email - Customer email
+   * @param {Object} bulkOrderData - Bulk order details
+   * @returns {Promise<Object>} Email send result
+   */
+  async sendBulkPurchaseConfirmation(email, bulkOrderData) {
+    const { sessionId, orders, totalPaid, orderStatusUrl } = bulkOrderData;
+
+    const emailData = {
+      from: this.fromEmail,
+      to: email,
+      subject: `Order Confirmation - ${orders.length} Backlink${orders.length > 1 ? 's' : ''} Purchased`,
+      html: this._generateBulkConfirmationTemplate(bulkOrderData)
+    };
+
+    return this._sendEmailWithRetry(emailData, 'bulk_purchase_confirmation');
+  }
+
+  /**
+   * Generate bulk purchase confirmation HTML template
+   * @param {Object} bulkOrderData - Bulk order details
+   * @returns {string} HTML template
+   * @private
+   */
+  _generateBulkConfirmationTemplate(bulkOrderData) {
+    const { sessionId, orders, totalPaid, orderStatusUrl } = bulkOrderData;
+
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .header { background-color: #2196F3; padding: 20px; text-align: center; color: white; }
+          .content { padding: 20px; }
+          .order-summary { background-color: #f5f5f5; padding: 15px; border-radius: 5px; margin: 20px 0; }
+          .order-item { border-bottom: 1px solid #ddd; padding: 10px 0; }
+          .order-item:last-child { border-bottom: none; }
+          .total { font-size: 18px; font-weight: bold; color: #2196F3; margin-top: 15px; }
+          .cta-button { 
+            display: inline-block; 
+            padding: 12px 24px; 
+            background-color: #2196F3; 
+            color: white; 
+            text-decoration: none; 
+            border-radius: 5px; 
+            margin: 20px 0; 
+          }
+          .footer { margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd; font-size: 12px; color: #666; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>✅ Order Confirmed!</h1>
+        </div>
+        
+        <div class="content">
+          <p><strong>Thank you for your bulk purchase!</strong></p>
+          <p>You've successfully purchased <strong>${orders.length} backlink placement${orders.length > 1 ? 's' : ''}</strong>.</p>
+          
+          <div class="order-summary">
+            <h3>Order Summary</h3>
+            ${orders.map((order, index) => `
+              <div class="order-item">
+                <p><strong>${index + 1}. ${order.articleTitle || 'Article'}</strong></p>
+                <p style="margin: 5px 0; font-size: 14px;">
+                  Domain: ${order.domain || 'Unknown'}<br>
+                  Keyword: "${order.backlinkData?.keyword || 'N/A'}"<br>
+                  Order ID: <code>${order.orderId}</code>
+                </p>
+              </div>
+            `).join('')}
+            
+            <div class="total">
+              Total Paid: $${totalPaid.toFixed(2)} USD
+            </div>
+          </div>
+          
+          <p><strong>What happens next?</strong></p>
+          <ul>
+            <li>Each article is being processed independently</li>
+            <li>You'll receive notifications as articles are completed</li>
+            <li>Processing typically takes 1-2 hours per article</li>
+            <li>All articles will be reviewed for quality before publication</li>
+          </ul>
+          
+          <p>Track the status of all your orders:</p>
+          <a href="${orderStatusUrl}" class="cta-button">View All Orders</a>
+          
+          <p>You can regenerate each backlink integration if you'd like any adjustments.</p>
+        </div>
+        
+        <div class="footer">
+          <p>Session ID: ${sessionId}</p>
+          <p>This is an automated email. Please do not reply to this message.</p>
+        </div>
+      </body>
+      </html>
+    `;
+  }
+
+  /**
+   * Send bulk order update notification (when all orders complete)
+   * @param {string} email - Customer email
+   * @param {Object} updateData - Bulk order update details
+   * @returns {Promise<Object>} Email send result
+   */
+  async sendBulkOrderUpdate(email, updateData) {
+    const { sessionId, completedCount, failedCount, totalCount, orderStatusUrl } = updateData;
+
+    const subject = failedCount > 0
+      ? `Update: ${completedCount}/${totalCount} Backlinks Completed (${failedCount} Issue${failedCount > 1 ? 's' : ''})`
+      : `All ${totalCount} Backlinks Completed!`;
+
+    const emailData = {
+      from: this.fromEmail,
+      to: email,
+      subject,
+      html: this._generateBulkUpdateTemplate(updateData)
+    };
+
+    return this._sendEmailWithRetry(emailData, 'bulk_order_update');
+  }
+
+  /**
+   * Generate bulk order update HTML template
+   * @param {Object} updateData - Bulk update details
+   * @returns {string} HTML template
+   * @private
+   */
+  _generateBulkUpdateTemplate(updateData) {
+    const { sessionId, completedCount, failedCount, totalCount, orderStatusUrl, orders } = updateData;
+    const allCompleted = completedCount === totalCount;
+
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .header { background-color: ${allCompleted ? '#4CAF50' : '#FF9800'}; padding: 20px; text-align: center; color: white; }
+          .content { padding: 20px; }
+          .stats { background-color: #f5f5f5; padding: 15px; border-radius: 5px; margin: 20px 0; display: flex; justify-content: space-around; }
+          .stat { text-align: center; }
+          .stat-number { font-size: 32px; font-weight: bold; color: #2196F3; }
+          .stat-label { font-size: 14px; color: #666; }
+          .cta-button { 
+            display: inline-block; 
+            padding: 12px 24px; 
+            background-color: #2196F3; 
+            color: white; 
+            text-decoration: none; 
+            border-radius: 5px; 
+            margin: 20px 0; 
+          }
+          .footer { margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd; font-size: 12px; color: #666; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>${allCompleted ? '🎉 All Orders Completed!' : '📊 Bulk Order Update'}</h1>
+        </div>
+        
+        <div class="content">
+          <p>${allCompleted 
+            ? 'Great news! All your backlink placements have been successfully completed.'
+            : `Your bulk order is progressing. Here's the current status:`
+          }</p>
+          
+          <div class="stats">
+            <div class="stat">
+              <div class="stat-number">${completedCount}</div>
+              <div class="stat-label">Completed</div>
+            </div>
+            ${failedCount > 0 ? `
+            <div class="stat">
+              <div class="stat-number" style="color: #FF5722;">${failedCount}</div>
+              <div class="stat-label">Issues</div>
+            </div>
+            ` : ''}
+            <div class="stat">
+              <div class="stat-number">${totalCount}</div>
+              <div class="stat-label">Total</div>
+            </div>
+          </div>
+          
+          ${failedCount > 0 ? `
+            <p><strong>⚠️ Some orders encountered issues:</strong></p>
+            <p>Don't worry - our team has been notified and will resolve these manually. You'll receive individual updates for each affected order.</p>
+          ` : ''}
+          
+          <p>View detailed status for each order:</p>
+          <a href="${orderStatusUrl}" class="cta-button">View All Orders</a>
+        </div>
+        
+        <div class="footer">
+          <p>Session ID: ${sessionId}</p>
           <p>This is an automated email. Please do not reply to this message.</p>
         </div>
       </body>

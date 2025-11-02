@@ -151,8 +151,10 @@ model Admin {
 model PurchaseSession {
   id                    String                @id @default(uuid()) @db.Uuid
   email                 String
-  article_id            String                @db.Uuid
-  backlink_data         Json                  // { keyword, target_url, notes? }
+  article_id            String?               @db.Uuid  // LEGACY: Keep for backward compatibility during transition
+  backlink_data         Json?                 // LEGACY: Keep for backward compatibility
+  cart_items            Json?                 // NEW: Array of { articleId, backlinkData: { keyword, target_url, notes } }
+  purchase_type         String                @default("BACKLINK") // "BACKLINK" or "ARTICLE_GENERATION"
   status                PurchaseSessionStatus @default(PENDING_AUTH)
   stripe_session_id     String?
   magic_link_token      String                @unique
@@ -161,7 +163,7 @@ model PurchaseSession {
   updated_at            DateTime              @updatedAt @db.Timestamptz
 
   // Relations
-  article               Article               @relation(fields: [article_id], references: [id], onDelete: Cascade)
+  article               Article?              @relation(fields: [article_id], references: [id], onDelete: Cascade)
   orders                Order[]
 
   @@map("purchase_sessions")
@@ -175,6 +177,7 @@ model Order {
   customer_email        String
   backlink_data         Json        // { keyword, target_url, notes? }
   payment_data          Json        // { stripe_session_id, amount, currency, status }
+  stripe_session_id     String?     // Direct field for idempotency checks
   status                OrderStatus @default(PROCESSING)
   created_at            DateTime    @default(now()) @db.Timestamptz
   completed_at          DateTime?   @db.Timestamptz
@@ -185,5 +188,7 @@ model Order {
   article               Article         @relation(fields: [article_id], references: [id], onDelete: Cascade)
   version               ArticleVersion? @relation(fields: [version_id], references: [id], onDelete: SetNull)
 
+  // Unique constraint: One order per article per Stripe session
+  @@unique([stripe_session_id, article_id])
   @@map("orders")
 }

@@ -447,3 +447,144 @@ export async function regenerateBacklink(orderId: string): Promise<{
 
   return res.json();
 }
+
+// ============================================
+// BULK PURCHASE API CALLS
+// ============================================
+
+export interface BulkPurchaseRequest {
+  cartItems: Array<{
+    articleId: string;
+    backlinkData: {
+      keyword: string;
+      targetUrl: string;
+      notes?: string;
+    };
+  }>;
+  email: string;
+}
+
+export interface BulkPurchaseResponse {
+  sessionId: string;
+  magicLinkSent: boolean;
+  articleCount: number;
+}
+
+export interface CartDetailsResponse {
+  session: {
+    id: string;
+    email: string;
+    purchase_type: string;
+    cart_items: Array<{
+      articleId: string;
+      backlinkData: {
+        keyword: string;
+        targetUrl: string;
+        notes?: string;
+      };
+    }>;
+    status: string;
+  };
+  articles: Array<{
+    id: string;
+    title: string;
+    domain: string;
+    preview?: string;
+  }>;
+  pricing: {
+    itemCount: number;
+    pricePerItem: number;
+    total: number;
+    currency: string;
+  };
+}
+
+export interface BulkOrderStatusResponse {
+  session: {
+    id: string;
+    email: string;
+    purchase_type: string;
+    status: string;
+    created_at: string;
+  };
+  orders: Array<{
+    id: string;
+    article_id: string;
+    status: string;
+    created_at: string;
+    completed_at?: string;
+    article?: {
+      id: string;
+      title: string;
+      domain: string;
+    };
+    backlink_data?: {
+      keyword: string;
+      target_url: string;
+    };
+  }>;
+  statistics: {
+    total: number;
+    processing: number;
+    quality_check: number;
+    admin_review: number;
+    completed: number;
+    failed: number;
+  };
+}
+
+// Initiate bulk purchase with cart items
+export async function initiateBulkPurchase(
+  data: BulkPurchaseRequest
+): Promise<BulkPurchaseResponse> {
+  const res = await fetch(`${API_BASE}/purchase/initiate-bulk`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(data),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json();
+    throw new Error(errorData.message || "Failed to initiate bulk purchase");
+  }
+
+  return res.json();
+}
+
+// Get cart details with article information and pricing
+export async function getCartDetails(
+  sessionId: string
+): Promise<CartDetailsResponse> {
+  const res = await fetch(`${API_BASE}/purchase/cart/${sessionId}`);
+
+  if (!res.ok) {
+    const errorData = await res.json();
+    throw new Error(errorData.message || "Failed to get cart details");
+  }
+
+  return res.json();
+}
+
+// Get status of all orders in a bulk purchase
+export async function getBulkOrderStatus(
+  sessionId: string
+): Promise<BulkOrderStatusResponse> {
+  const res = await fetch(`${API_BASE}/purchase/bulk-status/${sessionId}`);
+
+  if (!res.ok) {
+    const errorData = await res.json();
+    throw new Error(errorData.message || "Failed to get bulk order status");
+  }
+
+  const response = await res.json();
+
+  // Backend wraps response in { success, data } format
+  if (response.success && response.data) {
+    return response.data;
+  }
+
+  // Fallback for direct response (backward compatibility)
+  return response;
+}

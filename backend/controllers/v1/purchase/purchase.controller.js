@@ -174,16 +174,66 @@ class PurchaseController {
                 }
             }
 
-            // Create Stripe checkout session for unpaid sessions
-            const sessionDataWithType = {
-                ...result.sessionData,
-                type: result.sessionData.backlink_data?.type === 'ARTICLE_GENERATION' ? 'article_generation' : 'backlink'
-            };
+            // If verifySession already created a Stripe checkout URL, return it
+            if (result.stripeCheckoutUrl) {
+                return res.status(200).json({
+                    success: true,
+                    message: 'Session verified successfully',
+                    data: {
+                        valid: true,
+                        sessionData: result.sessionData,
+                        stripeCheckoutUrl: result.stripeCheckoutUrl,
+                        stripeSessionId: result.stripeSessionId,
+                        expiresAt: result.expiresAt
+                    }
+                });
+            }
+
+            // Fallback: Create Stripe checkout session for unpaid sessions (shouldn't reach here normally)
+            // Check if this is a bulk purchase
+            const isBulkPurchase = session?.purchase_type === 'BACKLINK' && session?.cart_items && session.cart_items.length > 0;
             
-            const checkoutSession = await this.stripeService.createCheckoutSession(
-                result.sessionData.sessionId,
-                sessionDataWithType
-            );
+            let checkoutSession;
+            
+            if (isBulkPurchase) {
+                // For bulk purchases, we need to fetch article details for cart items
+                const cartItemsWithDetails = await Promise.all(
+                    session.cart_items.map(async (item) => {
+                        const article = await prisma.article.findUnique({
+                            where: { id: item.articleId },
+                            include: { domain: true }
+                        });
+                        
+                        if (!article) return null;
+                        
+                        return {
+                            articleId: article.id,
+                            articleTitle: article.topic || article.keyword || 'Untitled',
+                            domainName: article.domain.slug,
+                            backlinkData: item.backlinkData
+                        };
+                    })
+                );
+                
+                const validCartItems = cartItemsWithDetails.filter(item => item !== null);
+                
+                checkoutSession = await this.stripeService.createBulkCheckoutSession(
+                    result.sessionData.sessionId,
+                    validCartItems,
+                    session.email
+                );
+            } else {
+                // Single article purchase
+                const sessionDataWithType = {
+                    ...result.sessionData,
+                    type: result.sessionData.backlink_data?.type === 'ARTICLE_GENERATION' ? 'article_generation' : 'backlink'
+                };
+                
+                checkoutSession = await this.stripeService.createCheckoutSession(
+                    result.sessionData.sessionId,
+                    sessionDataWithType
+                );
+            }
 
             res.status(200).json({
                 success: true,
@@ -192,7 +242,7 @@ class PurchaseController {
                     valid: true,
                     sessionData: result.sessionData,
                     stripeCheckoutUrl: checkoutSession.url,
-                    stripeSessionId: checkoutSession.sessionId,
+                    stripeSessionId: checkoutSession.sessionId || checkoutSession.id,
                     expiresAt: checkoutSession.expiresAt
                 }
             });
@@ -217,38 +267,105 @@ class PurchaseController {
                 throw new ValidationError('Stripe session ID is required');
             }
 
-            // Process payment success through Stripe
-            const paymentResult = await this.stripeService.processPaymentSuccess(stripeSessionId);
-            
-            // Complete purchase processing
-            const result = await this.purchaseService.completePayment(sessionId, stripeSessionId);
+            // First, check if this is a bulk purchase by fetching the session
+            const session = await prisma.purchaseSession.findUnique({
+                where: { id: sessionId }
+            });
 
-            // Send order confirmation email
-            try {
-                const orderStatus = await this.purchaseService.getOrderStatus(result.orderId);
-                await this.emailService.sendOrderConfirmation(
-                    orderStatus.orderDetails.customerEmail,
-                    {
-                        id: result.orderId,
-                        articleTitle: orderStatus.orderDetails.articleTitle,
-                        backlink_data: orderStatus.orderDetails.backlinkData, // Convert camelCase to snake_case
-                        status: result.status,
-                        created_at: orderStatus.orderDetails.createdAt
-                    }
-                );
-            } catch (emailError) {
-                console.error('Failed to send order confirmation email:', emailError);
-                // Continue with response even if email fails
+            if (!session) {
+                throw new NotFoundError('Purchase session not found');
             }
 
-            res.status(200).json({
-                success: true,
-                message: 'Payment completed successfully. Your order is now being processed.',
-                data: {
-                    orderId: result.orderId,
-                    status: result.status
+            // Determine if this is a bulk purchase
+            const isBulkPurchase = session.purchase_type === 'BACKLINK' && session.cart_items && session.cart_items.length > 0;
+
+            if (isBulkPurchase) {
+                // Process bulk payment
+                const paymentResult = await this.stripeService.processBulkPaymentSuccess(stripeSessionId);
+                
+                // Send bulk purchase confirmation email
+                try {
+                    // Fetch article details for email
+                    const ordersWithDetails = await Promise.all(
+                        paymentResult.orders.map(async (order) => {
+                            const fullOrder = await prisma.order.findUnique({
+                                where: { id: order.orderId },
+                                include: {
+                                    article: {
+                                        include: {
+                                            domain: true
+                                        }
+                                    }
+                                }
+                            });
+                            
+                            return {
+                                orderId: order.orderId,
+                                articleTitle: fullOrder.article.topic || fullOrder.article.keyword || 'Untitled',
+                                domain: fullOrder.article.domain.slug,
+                                backlinkData: fullOrder.backlink_data,
+                                status: order.status
+                            };
+                        })
+                    );
+
+                    await this.emailService.sendBulkPurchaseConfirmation(
+                        session.email,
+                        {
+                            sessionId: sessionId,
+                            orderCount: paymentResult.orders.length,
+                            totalPaid: session.cart_items.length * 15,
+                            orders: ordersWithDetails,
+                            orderStatusUrl: `${process.env.FRONTEND_URL}/bulk-order-status?session_id=${sessionId}`
+                        }
+                    );
+                } catch (emailError) {
+                    console.error('Failed to send bulk purchase confirmation email:', emailError);
                 }
-            });
+
+                return res.status(200).json({
+                    success: true,
+                    message: 'Bulk payment completed successfully',
+                    data: {
+                        sessionId: sessionId,
+                        orderCount: paymentResult.orders.length,
+                        orders: paymentResult.orders
+                    }
+                });
+            } else {
+                // Process single payment
+                const paymentResult = await this.stripeService.processPaymentSuccess(stripeSessionId);
+                
+                // Complete purchase processing
+                const result = await this.purchaseService.completePayment(sessionId, stripeSessionId);
+
+                // Send order confirmation email
+                try {
+                    const orderStatus = await this.purchaseService.getOrderStatus(result.orderId);
+                    await this.emailService.sendOrderConfirmation(
+                        orderStatus.orderDetails.customerEmail,
+                        {
+                            id: result.orderId,
+                            articleTitle: orderStatus.orderDetails.articleTitle,
+                            backlink_data: orderStatus.orderDetails.backlinkData,
+                            status: result.status,
+                            created_at: orderStatus.orderDetails.createdAt
+                        }
+                    );
+                } catch (emailError) {
+                    console.error('Failed to send order confirmation email:', emailError);
+                    // Continue with response even if email fails
+                }
+
+                return res.status(200).json({
+                    success: true,
+                    message: 'Payment completed successfully. Your order is now being processed.',
+                    data: {
+                        orderId: result.orderId,
+                        status: result.status
+                    }
+                });
+            }
 
         } catch (error) {
             next(error);
@@ -969,6 +1086,133 @@ class PurchaseController {
             next(error);
         }
     }
+
+    /**
+     * POST /api/v1/purchase/initiate-bulk
+     * Initiate bulk purchase for multiple articles
+     */
+    async initiateBulkPurchase(req, res, next) {
+        try {
+            const { cartItems, email } = req.body;
+
+            // Validate cart items
+            if (!Array.isArray(cartItems) || cartItems.length === 0) {
+                throw new ValidationError('Cart items must be a non-empty array');
+            }
+
+            if (cartItems.length > 20) {
+                throw new ValidationError('Maximum 20 articles per purchase');
+            }
+
+            // Validate email
+            if (!email) {
+                throw new ValidationError('Email is required');
+            }
+
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(email)) {
+                throw new ValidationError('Invalid email format');
+            }
+
+            // Validate each cart item
+            for (const item of cartItems) {
+                // Support both flat structure (keyword, targetUrl) and nested structure (backlinkData.keyword)
+                const keyword = item.keyword || item.backlinkData?.keyword;
+                const targetUrl = item.targetUrl || item.backlinkData?.targetUrl;
+                
+                if (!item.articleId || !keyword || !targetUrl) {
+                    throw new ValidationError('Each cart item must have articleId and backlink data (keyword, targetUrl)');
+                }
+
+                // Validate URL
+                try {
+                    new URL(targetUrl);
+                } catch {
+                    throw new ValidationError(`Invalid target URL: ${targetUrl}`);
+                }
+            }
+
+            // Initiate bulk purchase
+            const result = await this.purchaseService.initiateBulkPurchase(cartItems, email);
+
+            // Send magic link email with cart summary
+            let magicLinkSent = false;
+            try {
+                await this.emailService.sendMagicLink(
+                    email,
+                    result.magicLinkToken,
+                    {
+                        sessionId: result.sessionId,
+                        cartSize: result.cartSize,
+                        type: 'bulk_backlink'
+                    }
+                );
+                magicLinkSent = true;
+            } catch (error) {
+                console.error('Failed to send magic link email:', error);
+            }
+
+            res.status(200).json({
+                success: true,
+                message: 'Bulk purchase initiated successfully. Please check your email for the magic link.',
+                sessionId: result.sessionId,
+                magicLinkSent,
+                cartSize: result.cartSize,
+                totalPrice: result.cartSize * 15
+            });
+
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    /**
+     * GET /api/v1/purchase/cart/:sessionId
+     * Get cart details for review before payment
+     */
+    async getCartDetails(req, res, next) {
+        try {
+            const { sessionId } = req.params;
+
+            if (!sessionId) {
+                throw new ValidationError('Session ID is required');
+            }
+
+            const cartDetails = await this.purchaseService.getCartDetails(sessionId);
+
+            res.status(200).json({
+                success: true,
+                data: cartDetails
+            });
+
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    /**
+     * GET /api/v1/purchase/bulk-status/:sessionId
+     * Get status of all orders in bulk purchase
+     */
+    async getBulkOrderStatus(req, res, next) {
+        try {
+            const { sessionId } = req.params;
+
+            if (!sessionId) {
+                throw new ValidationError('Session ID is required');
+            }
+
+            const bulkStatus = await this.purchaseService.getBulkOrderStatus(sessionId);
+
+            res.status(200).json({
+                success: true,
+                data: bulkStatus
+            });
+
+        } catch (error) {
+            next(error);
+        }
+    }
 }
 
 // Export controller methods directly
@@ -1041,5 +1285,20 @@ module.exports = {
     async initiateArticlePurchase(req, res, next) {
         const controller = new PurchaseController();
         return controller.initiateArticlePurchase(req, res, next);
+    },
+
+    async initiateBulkPurchase(req, res, next) {
+        const controller = new PurchaseController();
+        return controller.initiateBulkPurchase(req, res, next);
+    },
+
+    async getCartDetails(req, res, next) {
+        const controller = new PurchaseController();
+        return controller.getCartDetails(req, res, next);
+    },
+
+    async getBulkOrderStatus(req, res, next) {
+        const controller = new PurchaseController();
+        return controller.getBulkOrderStatus(req, res, next);
     }
 };

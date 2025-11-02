@@ -104,8 +104,16 @@ export interface PurchaseCompleteResponse {
   success: boolean;
   message: string;
   data: {
-    orderId: string;
-    status: string;
+    orderId?: string;
+    status?: string;
+    // Bulk purchase fields
+    sessionId?: string;
+    orderCount?: number;
+    orders?: Array<{
+      orderId: string;
+      articleId: string;
+      status: string;
+    }>;
   };
 }
 
