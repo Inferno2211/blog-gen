@@ -2,16 +2,19 @@ import React, { useState, useEffect } from 'react';
 import { createDomain, bulkCreateDomains, getAvailableTemplates, createDomainFolder } from '../services/domainService';
 import type { CreateDomainRequest, BulkCreateDomainRequest, BulkCreateDomainResponse, CreateDomainResponse } from '../types/domain';
 
-const templateOptions = [
-  { label: 'Default', value: 'default' },
-  { label: 'Blog', value: 'blog' },
-  { label: 'Portfolio', value: 'portfolio' },
-];
-
 const CreateDomain = () => {
   const [mode, setMode] = useState<'single' | 'bulk'>('single');
   // Single add state
-  const [single, setSingle] = useState<CreateDomainRequest>({ name: '', slug: '', url: '', tags: '', template: 'default' });
+  const [single, setSingle] = useState<CreateDomainRequest>({ 
+    name: '', 
+    slug: '', 
+    url: '', 
+    tags: '', 
+    categories: '',
+    domain_age: undefined,
+    domain_rating: undefined,
+    template: 'default' 
+  });
   const [singleResult, setSingleResult] = useState<CreateDomainResponse | null>(null);
   const [singleLoading, setSingleLoading] = useState(false);
   // Bulk add state
@@ -70,7 +73,16 @@ const CreateDomain = () => {
       }
       
       setSingleResult(res);
-      if (res.success) setSingle({ name: '', slug: '', url: '', tags: '', template: 'default' });
+      if (res.success) setSingle({ 
+        name: '', 
+        slug: '', 
+        url: '', 
+        tags: '', 
+        categories: '',
+        domain_age: undefined,
+        domain_rating: undefined,
+        template: 'default' 
+      });
     } catch (err) {
       console.error('Failed to create domain:', err);
       setSingleResult({ success: false, error: err instanceof Error ? err.message : 'Failed to create domain.' });
@@ -184,6 +196,46 @@ const CreateDomain = () => {
               onChange={handleSingleChange}
               className="w-full p-2 rounded border border-gray-300 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
             />
+          </div>
+          <div>
+            <label className="block font-medium mb-1 text-gray-800 dark:text-gray-200">Categories (comma separated)</label>
+            <input
+              type="text"
+              name="categories"
+              value={single.categories || ''}
+              onChange={handleSingleChange}
+              placeholder="e.g., technology, business, finance"
+              className="w-full p-2 rounded border border-gray-300 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+            />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block font-medium mb-1 text-gray-800 dark:text-gray-200">Domain Age (years)</label>
+              <input
+                type="number"
+                name="domain_age"
+                value={single.domain_age || ''}
+                onChange={handleSingleChange}
+                placeholder="e.g., 5"
+                min="0"
+                max="50"
+                className="w-full p-2 rounded border border-gray-300 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+              />
+            </div>
+            <div>
+              <label className="block font-medium mb-1 text-gray-800 dark:text-gray-200">Domain Rating (0-100)</label>
+              <input
+                type="number"
+                name="domain_rating"
+                value={single.domain_rating || ''}
+                onChange={handleSingleChange}
+                placeholder="e.g., 75"
+                min="0"
+                max="100"
+                step="0.1"
+                className="w-full p-2 rounded border border-gray-300 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+              />
+            </div>
           </div>
           <div>
             <label className="block font-medium mb-1 text-gray-800 dark:text-gray-200">Template</label>

@@ -63,7 +63,10 @@ const ViewDomains = () => {
       name: domain.name,
       slug: domain.slug,
       url: domain.url,
-      tags: domain.tags
+      tags: domain.tags,
+      categories: domain.categories,
+      domain_age: domain.domain_age,
+      domain_rating: domain.domain_rating
     });
   };
 
@@ -207,6 +210,15 @@ const ViewDomains = () => {
                   Tags
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                  Categories
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                  Age (Years)
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                  DR Score
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                   Status
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
@@ -264,6 +276,64 @@ const ViewDomains = () => {
                     ) : (
                       <div className="text-sm text-gray-900 dark:text-gray-100">
                         {domain.tags || '-'}
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    {editingDomain === domain.id ? (
+                      <input
+                        type="text"
+                        value={editForm.categories || ''}
+                        onChange={(e) => setEditForm({ ...editForm, categories: e.target.value })}
+                        placeholder="tech, finance"
+                        className="w-full p-1 border rounded"
+                      />
+                    ) : (
+                      <div className="text-sm text-gray-900 dark:text-gray-100">
+                        {domain.categories || '-'}
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    {editingDomain === domain.id ? (
+                      <input
+                        type="number"
+                        value={editForm.domain_age || ''}
+                        onChange={(e) => setEditForm({ ...editForm, domain_age: e.target.value ? parseInt(e.target.value) : undefined })}
+                        placeholder="5"
+                        min="0"
+                        max="50"
+                        className="w-full p-1 border rounded"
+                      />
+                    ) : (
+                      <div className="text-sm text-gray-900 dark:text-gray-100">
+                        {domain.domain_age ? `${domain.domain_age}y` : '-'}
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    {editingDomain === domain.id ? (
+                      <input
+                        type="number"
+                        value={editForm.domain_rating || ''}
+                        onChange={(e) => setEditForm({ ...editForm, domain_rating: e.target.value ? parseFloat(e.target.value) : undefined })}
+                        placeholder="75"
+                        min="0"
+                        max="100"
+                        step="0.1"
+                        className="w-full p-1 border rounded"
+                      />
+                    ) : (
+                      <div className="text-sm text-gray-900 dark:text-gray-100">
+                        {domain.domain_rating ? (
+                          <div className={`inline-flex px-2 py-1 text-xs rounded-full ${
+                            domain.domain_rating >= 70 ? 'bg-green-100 text-green-800' :
+                            domain.domain_rating >= 40 ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-red-100 text-red-800'
+                          }`}>
+                            DR {domain.domain_rating}
+                          </div>
+                        ) : '-'}
                       </div>
                     )}
                   </td>

@@ -9,7 +9,7 @@ const { buildDomain: buildDomainService, downloadDomain: downloadDomainService, 
 // Supports single and bulk add, assigns tags, and can create template folder
 async function createDomain(req, res) {
     try {
-        const { name, slug, url, tags, template, domains } = req.body;
+        const { name, slug, url, tags, categories, domain_age, domain_rating, template, domains } = req.body;
         // Bulk add
         if (Array.isArray(domains)) {
             const results = await domainService.bulkCreateDomains(domains, tags);
@@ -38,6 +38,9 @@ async function createDomain(req, res) {
             slug,
             url: url || '',
             tags: Array.isArray(tags) ? tags.join(',') : tags || '',
+            categories: categories || null,
+            domain_age: domain_age ? parseInt(domain_age, 10) : null,
+            domain_rating: domain_rating ? parseFloat(domain_rating) : null,
         };
         const created = await domainService.createDomain(domainData);
         // if (template) {

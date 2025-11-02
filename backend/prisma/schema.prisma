@@ -56,14 +56,17 @@ enum OrderStatus {
 }
 
 model Domain {
-  id         String   @id @default(uuid()) @db.Uuid
-  slug       String   @unique
-  name       String
-  url        String?
-  tags       String?
-  created_at DateTime @default(now()) @db.Timestamptz
+  id            String   @id @default(uuid()) @db.Uuid
+  slug          String   @unique
+  name          String
+  url           String?
+  tags          String?
+  categories    String?  // Comma-separated categories (e.g., "technology,business,finance")
+  domain_age    Int?     // Domain age in years
+  domain_rating Float?   // Domain rating/SEO value (0-100 scale)
+  created_at    DateTime @default(now()) @db.Timestamptz
 
-  articles   Article[]
+  articles      Article[]
 }
 
 model Article {

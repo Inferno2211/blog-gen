@@ -16,6 +16,9 @@ async function getDomain(id) {
         slug: domain.slug,
         url: domain.url,
         tags: domain.tags,
+        categories: domain.categories,
+        domain_age: domain.domain_age,
+        domain_rating: domain.domain_rating,
         created_at: domain.created_at,
         articleCount: domain.articles.length,
         articles: domain.articles.map(a => ({
@@ -37,6 +40,9 @@ async function getAllDomains() {
         slug: d.slug,
         url: d.url,
         tags: d.tags,
+        categories: d.categories,
+        domain_age: d.domain_age,
+        domain_rating: d.domain_rating,
         created_at: d.created_at,
         articleCount: d.articles.length
     }));
@@ -50,6 +56,9 @@ async function getAllDomainsWithArticles() {
         slug: d.slug,
         url: d.url,
         tags: d.tags,
+        categories: d.categories,
+        domain_age: d.domain_age,
+        domain_rating: d.domain_rating,
         created_at: d.created_at,
         articles: d.articles.map(a => ({
             id: a.id,
