@@ -402,8 +402,21 @@ class PurchaseController {
                 throw new NotFoundError('Order not found');
             }
 
-            // Get queue status for this order
-            const queueStatus = await this.queueService.getOrderJobStatus(orderId);
+            // Get queue status for this order (with error handling for when Redis is unavailable)
+            let queueStatus = {
+                orderId,
+                jobs: [],
+                hasActiveJob: false,
+                hasFailedJob: false,
+                latestJob: null
+            };
+            
+            try {
+                queueStatus = await this.queueService.getOrderJobStatus(orderId);
+            } catch (error) {
+                console.warn(`Failed to get queue status for order ${orderId}:`, error.message);
+                // Continue with default empty queue status
+            }
 
             // Determine overall status message
             let statusMessage = 'Unknown status';
@@ -913,33 +926,38 @@ class PurchaseController {
             let job;
             let message;
             
-            if (isArticleGeneration) {
-                // Article generation regeneration - regenerate the entire article
-                job = await this.queueService.addArticleGenerationJob({
-                    orderId: order.id,
-                    articleId: order.article_id,
-                    domainId: order.article.domain_id,
-                    topic: backlinkData.topic || backlinkData.articleTitle,
-                    niche: backlinkData.niche || '',
-                    keyword: backlinkData.keyword || '',
-                    targetUrl: backlinkData.target_url || '',
-                    anchorText: backlinkData.keyword || '',
-                    email: order.customer_email,
-                    isRegeneration: true
-                });
-                message = 'Article regeneration request submitted successfully. You will receive an email when ready.';
-            } else {
-                // Backlink integration regeneration - re-integrate backlink into published article
-                job = await this.queueService.addBacklinkIntegrationJob({
-                    orderId: order.id,
-                    articleId: order.article_id,
-                    targetUrl: backlinkData.target_url,
-                    anchorText: backlinkData.keyword,
-                    notes: backlinkData.notes,
-                    email: order.customer_email,
-                    isRegeneration: true
-                });
-                message = 'Backlink regeneration request submitted successfully. The backlink will be re-integrated into the published article. You will receive an email when ready.';
+            try {
+                if (isArticleGeneration) {
+                    // Article generation regeneration - regenerate the entire article
+                    job = await this.queueService.addArticleGenerationJob({
+                        orderId: order.id,
+                        articleId: order.article_id,
+                        domainId: order.article.domain_id,
+                        topic: backlinkData.topic || backlinkData.articleTitle,
+                        niche: backlinkData.niche || '',
+                        keyword: backlinkData.keyword || '',
+                        targetUrl: backlinkData.target_url || '',
+                        anchorText: backlinkData.keyword || '',
+                        email: order.customer_email,
+                        isRegeneration: true
+                    });
+                    message = 'Article regeneration request submitted successfully. You will receive an email when ready.';
+                } else {
+                    // Backlink integration regeneration - re-integrate backlink into published article
+                    job = await this.queueService.addBacklinkIntegrationJob({
+                        orderId: order.id,
+                        articleId: order.article_id,
+                        targetUrl: backlinkData.target_url,
+                        anchorText: backlinkData.keyword,
+                        notes: backlinkData.notes,
+                        email: order.customer_email,
+                        isRegeneration: true
+                    });
+                    message = 'Backlink regeneration request submitted successfully. The backlink will be re-integrated into the published article. You will receive an email when ready.';
+                }
+            } catch (queueError) {
+                console.error(`Failed to queue regeneration job for order ${orderId}:`, queueError);
+                throw new Error(`Failed to queue regeneration job. Please ensure the queue service (Redis) is running. Error: ${queueError.message}`);
             }
 
             // Update order status back to PROCESSING
@@ -1080,6 +1098,127 @@ class PurchaseController {
             res.status(200).json({
                 sessionId: result.sessionId,
                 magicLinkSent: result.magicLinkSent
+            });
+
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    /**
+     * POST /api/v1/purchase/initiate-multi-article
+     * Initiate multi-article purchase for a single domain
+     */
+    async initiateMultiArticlePurchase(req, res, next) {
+        try {
+            const { domainId, email, articleRequests } = req.body;
+
+            // Validate required fields
+            if (!domainId) {
+                throw new ValidationError('Domain ID is required');
+            }
+
+            if (!email) {
+                throw new ValidationError('Email is required');
+            }
+
+            // Validate email format
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(email)) {
+                throw new ValidationError('Invalid email format');
+            }
+
+            // Validate article requests array
+            if (!Array.isArray(articleRequests) || articleRequests.length === 0) {
+                throw new ValidationError('Article requests must be a non-empty array');
+            }
+
+            if (articleRequests.length > 10) {
+                throw new ValidationError('Maximum 10 articles per request');
+            }
+
+            // Verify domain exists
+            const domain = await prisma.domain.findUnique({
+                where: { id: domainId }
+            });
+
+            if (!domain) {
+                throw new ValidationError('Domain not found');
+            }
+
+            // Validate each article request
+            const topics = [];
+            for (let i = 0; i < articleRequests.length; i++) {
+                const req = articleRequests[i];
+
+                if (!req.articleTitle || !req.topic) {
+                    throw new ValidationError(`Article ${i + 1}: Title and topic are required`);
+                }
+
+                // Check for duplicate topics
+                const normalizedTopic = req.topic.toLowerCase().trim();
+                if (topics.includes(normalizedTopic)) {
+                    throw new ValidationError(`Duplicate topic detected: "${req.topic}"`);
+                }
+                topics.push(normalizedTopic);
+
+                // Validate backlink if included
+                if (req.targetUrl || req.anchorText) {
+                    if (!req.targetUrl || !req.anchorText) {
+                        throw new ValidationError(`Article ${i + 1}: Both targetUrl and anchorText required for backlink`);
+                    }
+
+                    try {
+                        new URL(req.targetUrl);
+                    } catch (e) {
+                        throw new ValidationError(`Article ${i + 1}: Invalid target URL format`);
+                    }
+                }
+            }
+
+            // Call generation service to create session
+            const ArticleGenerationService = require('../../../services/ArticleGenerationService');
+            const generationService = new ArticleGenerationService();
+
+            // Transform requests to generation format (all for same domain)
+            const generationRequests = articleRequests.map(req => ({
+                domainId: domainId,
+                topic: req.topic.trim(),
+                niche: req.niche?.trim() || '',
+                keyword: req.keyword?.trim() || '',
+                targetUrl: req.targetUrl?.trim() || '',
+                anchorText: req.anchorText?.trim() || '',
+                notes: `Title: ${req.articleTitle.trim()}${req.notes ? '\n' + req.notes : ''}`
+            }));
+
+            const result = await generationService.initiateBulkGeneration(
+                generationRequests,
+                email
+            );
+
+            // Send magic link email
+            const EmailService = require('../../../services/EmailService');
+            const emailService = new EmailService();
+
+            const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
+            const magicLink = `${FRONTEND_URL}/verify-generation?token=${result.magicLinkToken}`;
+
+            // For pre-payment magic link email, include magicLink and articleCount
+            await emailService.sendBulkGenerationConfirmation(email, {
+                sessionId: result.sessionId,
+                magicLink: magicLink,
+                articleCount: articleRequests.length,
+                orders: articleRequests.map((req, i) => ({
+                    articleTopic: req.topic,
+                    domainName: domain.name
+                }))
+            });
+
+            res.status(200).json({
+                success: true,
+                sessionId: result.sessionId,
+                articleCount: result.cartSize,
+                message: `Magic link sent to ${email}`
             });
 
         } catch (error) {
@@ -1285,6 +1424,11 @@ module.exports = {
     async initiateArticlePurchase(req, res, next) {
         const controller = new PurchaseController();
         return controller.initiateArticlePurchase(req, res, next);
+    },
+
+    async initiateMultiArticlePurchase(req, res, next) {
+        const controller = new PurchaseController();
+        return controller.initiateMultiArticlePurchase(req, res, next);
     },
 
     async initiateBulkPurchase(req, res, next) {

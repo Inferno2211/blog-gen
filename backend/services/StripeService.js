@@ -810,6 +810,73 @@ class StripeService {
       throw new AppError('Failed to process bulk payment', 500, 'BULK_PAYMENT_PROCESSING_ERROR');
     }
   }
+
+  /**
+   * Create Stripe checkout session for article generation
+   * @param {string} sessionId - Generation session ID
+   * @param {Array} generationRequests - Array of article generation requests
+   * @param {string} email - Customer email
+   * @returns {Promise<{sessionId: string, url: string}>}
+   */
+  async createGenerationCheckoutSession(sessionId, generationRequests, email) {
+    try {
+      if (!Array.isArray(generationRequests) || generationRequests.length === 0) {
+        throw new AppError('Generation requests must be a non-empty array', 400, 'INVALID_REQUESTS');
+      }
+
+      if (generationRequests.length > 20) {
+        throw new AppError('Maximum 20 articles per generation request', 400, 'CART_TOO_LARGE');
+      }
+
+      // Create line items for each article generation
+      const lineItems = generationRequests.map((request, index) => ({
+        price_data: {
+          currency: this.CURRENCY,
+          product_data: {
+            name: `Article Generation - ${request.topic}`,
+            description: `Domain: ${request.domain?.name || 'N/A'} | Niche: ${request.niche || 'General'}`,
+            metadata: {
+              domain_id: request.domainId,
+              topic: request.topic,
+              cart_index: index
+            }
+          },
+          unit_amount: 2500 // $25 per article
+        },
+        quantity: 1
+      }));
+
+      // Create Stripe checkout session
+      const checkoutSession = await this.stripe.checkout.sessions.create({
+        payment_method_types: ['card'],
+        line_items: lineItems,
+        mode: 'payment',
+        // Unified success URL: reuse existing payment success page to keep front-end handling consistent.
+        // Add a query param so the front-end can distinguish generation vs purchase flows.
+        success_url: `${process.env.FRONTEND_URL}/payment/success?stripe_session_id={CHECKOUT_SESSION_ID}&session_id=${sessionId}&type=generation`,
+        cancel_url: `${process.env.FRONTEND_URL}/generation/cancel?session_id=${sessionId}`,
+        customer_email: email,
+        metadata: {
+          generation_session_id: sessionId,
+          cart_size: generationRequests.length,
+          type: 'article_generation'
+        },
+        expires_at: Math.floor(Date.now() / 1000) + (30 * 60) // 30 minutes
+      });
+
+      console.log(`Generation checkout session created: ${checkoutSession.id} for ${generationRequests.length} articles`);
+
+      return {
+        sessionId: checkoutSession.id,
+        url: checkoutSession.url,
+        expiresAt: checkoutSession.expires_at
+      };
+
+    } catch (error) {
+      console.error('Error creating generation checkout session:', error);
+      throw new AppError('Failed to create generation checkout session', 500, 'GENERATION_CHECKOUT_ERROR');
+    }
+  }
 }
 
 module.exports = StripeService;

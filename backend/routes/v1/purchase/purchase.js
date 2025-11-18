@@ -5,6 +5,7 @@ const purchaseController = require('../../../controllers/v1/purchase/purchase.co
 // Purchase workflow endpoints
 router.post('/initiate', purchaseController.initiatePurchase);
 router.post('/initiate-article', purchaseController.initiateArticlePurchase);
+router.post('/initiate-multi-article', purchaseController.initiateMultiArticlePurchase); // NEW: Multi-article for single domain
 router.post('/initiate-bulk', purchaseController.initiateBulkPurchase); // NEW: Bulk purchase
 router.post('/verify-session', purchaseController.verifySession);
 router.post('/complete', purchaseController.completePayment);

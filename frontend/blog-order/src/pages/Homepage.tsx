@@ -6,6 +6,8 @@ import LoadingSpinner from "../components/LoadingSpinner";
 import ErrorMessage from "../components/ErrorMessage";
 import CartIcon from "../components/CartIcon";
 import ShoppingCart from "../components/ShoppingCart";
+import GenerationCartIcon from "../components/GenerationCartIcon";
+import GenerationCart from "../components/GenerationCart";
 
 export default function Homepage() {
   const [articles, setArticles] = useState<PublicArticle[]>([]);
@@ -223,12 +225,36 @@ export default function Homepage() {
                   $25 per article
                 </span>
               </div>
-              <button
-                onClick={() => (window.location.href = "/request-article")}
-                className="w-full bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700 transition-colors font-medium"
-              >
-                Request Article
-              </button>
+              <div className="space-y-2">
+                <button
+                  onClick={() => (window.location.href = "/request-article")}
+                  className="w-full bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700 transition-colors font-medium"
+                >
+                  Request Single Article
+                </button>
+                <button
+                  onClick={() =>
+                    (window.location.href = "/request-multiple-articles")
+                  }
+                  className="w-full bg-purple-600 text-white py-2 px-4 rounded-md hover:bg-purple-700 transition-colors font-medium flex items-center justify-center gap-2"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    strokeWidth={1.5}
+                    stroke="currentColor"
+                    className="w-5 h-5"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M12 4.5v15m7.5-7.5h-15"
+                    />
+                  </svg>
+                  Request Multiple Articles
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -414,6 +440,12 @@ export default function Homepage() {
           </div>
         </div>
       </footer>
+
+      {/* Cart Components */}
+      <CartIcon />
+      <ShoppingCart />
+      <GenerationCartIcon />
+      <GenerationCart />
     </div>
   );
 }

@@ -66,7 +66,8 @@ model Domain {
   domain_rating Float?   // Domain rating/SEO value (0-100 scale)
   created_at    DateTime @default(now()) @db.Timestamptz
 
-  articles      Article[]
+  articles                  Article[]
+  generation_requests       ArticleGenerationRequest[]
 }
 
 model Article {
@@ -101,6 +102,7 @@ model Article {
   // purchase sessions and orders
   purchase_sessions    PurchaseSession[]
   orders              Order[]
+  generation_requests ArticleGenerationRequest[]
 
   @@map("articles")
 }
@@ -172,6 +174,7 @@ model PurchaseSession {
 model Order {
   id                    String      @id @default(uuid()) @db.Uuid
   session_id            String      @db.Uuid
+  session_type          String      @default("PURCHASE") // "PURCHASE" or "GENERATION"
   article_id            String      @db.Uuid
   version_id            String?     @db.Uuid  // Created after backlink integration
   customer_email        String
@@ -184,11 +187,53 @@ model Order {
   updated_at            DateTime    @updatedAt @db.Timestamptz
 
   // Relations
-  session               PurchaseSession @relation(fields: [session_id], references: [id], onDelete: Cascade)
+  session               PurchaseSession? @relation(fields: [session_id], references: [id], onDelete: Cascade)
   article               Article         @relation(fields: [article_id], references: [id], onDelete: Cascade)
   version               ArticleVersion? @relation(fields: [version_id], references: [id], onDelete: SetNull)
 
   // Unique constraint: One order per article per Stripe session
   @@unique([stripe_session_id, article_id])
   @@map("orders")
+}
+
+model ArticleGenerationSession {
+  id                    String                @id @default(uuid()) @db.Uuid
+  email                 String
+  generation_requests   Json                  // Array of { domainId, topic, niche, keyword, targetUrl, anchorText, notes, price }
+  total_articles        Int                   @default(0)
+  total_price           Decimal               @db.Decimal(10, 2)
+  status                PurchaseSessionStatus @default(PENDING_AUTH)
+  stripe_session_id     String?               @unique
+  magic_link_token      String                @unique
+  magic_link_expires    DateTime              @db.Timestamptz
+  created_at            DateTime              @default(now()) @db.Timestamptz
+  updated_at            DateTime              @updatedAt @db.Timestamptz
+
+  @@map("article_generation_sessions")
+}
+
+model ArticleGenerationRequest {
+  id                    String   @id @default(uuid()) @db.Uuid
+  session_id            String   @db.Uuid
+  domain_id             String   @db.Uuid
+  topic                 String
+  niche                 String?
+  keyword               String?
+  target_url            String   // Customer's backlink URL
+  anchor_text           String   // Customer's anchor text
+  notes                 String?
+  price                 Decimal  @db.Decimal(10, 2)
+  article_id            String?  @db.Uuid  // Created after article generation starts
+  order_id              String?  @db.Uuid  // Linked order
+  status                String   @default("PENDING") // PENDING, PROCESSING, COMPLETED, FAILED
+  created_at            DateTime @default(now()) @db.Timestamptz
+  updated_at            DateTime @updatedAt @db.Timestamptz
+
+  // Relations
+  domain                Domain   @relation(fields: [domain_id], references: [id], onDelete: Cascade)
+  article               Article? @relation(fields: [article_id], references: [id], onDelete: SetNull)
+
+  // Unique constraint: Prevent duplicate article generation on same domain+topic in same session
+  @@unique([session_id, domain_id, topic])
+  @@map("article_generation_requests")
 }

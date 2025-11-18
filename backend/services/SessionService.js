@@ -392,6 +392,57 @@ class SessionService {
         }
     }
 
+    /**
+     * Verify magic link for article generation session
+     * @param {string} token - Magic link token
+     * @returns {Promise<Object>} Generation session data or error
+     */
+    async verifyGenerationMagicLink(token) {
+        if (!token || typeof token !== 'string') {
+            throw new Error('Token is required');
+        }
+
+        try {
+            const session = await prisma.articleGenerationSession.findUnique({
+                where: { magic_link_token: token }
+            });
+
+            if (!session) {
+                throw new Error('Invalid or expired token');
+            }
+
+            // Check if token has expired
+            if (new Date() > session.magic_link_expires) {
+                throw new Error('Token has expired');
+            }
+
+            // Check session status
+            if (session.status !== 'PENDING_AUTH' && session.status !== 'PAID') {
+                throw new Error(`Session is not in valid state. Current status: ${session.status}`);
+            }
+
+            // If session is already PAID, return it as-is so callers can handle already-paid flows
+            if (session.status === 'PAID') {
+                console.log(`Generation magic link verified (already PAID) - Session: ${session.id}, Email: ${session.email}`);
+                return session;
+            }
+
+            // Otherwise, update session to AUTHENTICATED
+            const updatedSession = await prisma.articleGenerationSession.update({
+                where: { id: session.id },
+                data: { status: 'AUTHENTICATED' }
+            });
+
+            console.log(`Generation magic link verified - Session: ${session.id}, Email: ${session.email}`);
+
+            return updatedSession;
+
+        } catch (error) {
+            console.error('Failed to verify generation magic link:', error);
+            throw error;
+        }
+    }
+
     // Private helper methods
 
     /**

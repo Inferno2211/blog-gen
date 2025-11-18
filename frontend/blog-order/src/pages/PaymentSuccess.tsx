@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { CheckCircle, Home } from "lucide-react";
 import { completePurchase, getOrderDetails } from "../services/purchaseService";
+import { generationService } from "../services/generationService";
 
 export default function PaymentSuccess() {
   const [searchParams] = useSearchParams();
@@ -13,6 +14,7 @@ export default function PaymentSuccess() {
   useEffect(() => {
     const stripeSessionId = searchParams.get("stripe_session_id"); // This is the Stripe session ID
     const sessionId = searchParams.get("session_id"); // This is our internal purchase session ID
+    const type = searchParams.get("type");
 
     if (!stripeSessionId || !sessionId) {
       setError("Invalid payment confirmation link");
@@ -20,16 +22,35 @@ export default function PaymentSuccess() {
       return;
     }
 
-    handlePaymentCompletion(sessionId, stripeSessionId);
+    handlePaymentCompletion(sessionId, stripeSessionId, type);
   }, [searchParams]);
 
   const handlePaymentCompletion = async (
     sessionId: string,
-    stripeSessionId: string
+    stripeSessionId: string,
+    type?: string | null
   ) => {
     try {
       setLoading(true);
       setError(null);
+
+      // For generation flows, the webhook processes the payment; do not call purchase complete
+      if (type === "generation") {
+        try {
+          // Query bulk status to ensure the webhook processed the payment
+          await generationService.getBulkGenerationStatus(sessionId);
+        } catch (err) {
+          // If the status endpoint fails, still allow redirect—webhook may still be processing
+          console.warn("Generation status fetch failed", err);
+        }
+
+        // Redirect to bulk-generation status page
+        setTimeout(() => {
+          navigate(`/bulk-generation-status?session_id=${sessionId}`);
+        }, 1500);
+
+        return;
+      }
 
       const response = await completePurchase(sessionId, stripeSessionId);
 
