@@ -325,7 +325,8 @@ export async function customerRegenerateArticle(data: {
 export async function customerSubmitArticleForReview(data: {
   orderId: string;
   versionId: string;
-}): Promise<{ reviewId: string }> {
+  scheduledPublishAt?: string; // ISO 8601 UTC string
+}): Promise<{ reviewId: string; scheduledPublish?: string }> {
   const res = await fetch(`${API_BASE}/purchase/submit-for-review`, {
     method: "POST",
     headers: {
@@ -409,7 +410,8 @@ export async function customerRegenerateBacklink(data: {
 export async function customerSubmitForReview(data: {
   orderId: string;
   versionId: string;
-}): Promise<{ success: boolean; message: string }> {
+  scheduledPublishAt?: string; // ISO 8601 UTC string
+}): Promise<{ success: boolean; message: string; scheduledPublish?: string }> {
   const res = await fetch(`${API_BASE}/purchase/submit-for-review`, {
     method: "POST",
     headers: {
@@ -513,6 +515,8 @@ export interface BulkOrderStatusResponse {
     status: string;
     created_at: string;
     completed_at?: string;
+    scheduled_publish_at?: string;
+    scheduled_status?: "SCHEDULED" | "CANCELLED" | "PUBLISHED" | "FAILED";
     article?: {
       id: string;
       title: string;
@@ -530,6 +534,7 @@ export interface BulkOrderStatusResponse {
     admin_review: number;
     completed: number;
     failed: number;
+    scheduled?: number;
   };
 }
 
@@ -587,4 +592,109 @@ export async function getBulkOrderStatus(
 
   // Fallback for direct response (backward compatibility)
   return response;
+}
+
+// =============================================================================
+// SCHEDULED PUBLISHING FUNCTIONS
+// =============================================================================
+
+/**
+ * Schedule an article version for future publish
+ * @param orderId - The order ID
+ * @param versionId - The version ID to schedule
+ * @param scheduledPublishAt - Date object (will be converted to UTC ISO string)
+ */
+export async function schedulePublication(data: {
+  orderId: string;
+  versionId: string;
+  scheduledPublishAt: Date;
+}): Promise<{
+  success: boolean;
+  message: string;
+  scheduledPublishAt: string;
+  jobId: string;
+}> {
+  const res = await fetch(`${API_BASE}/purchase/schedule`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      orderId: data.orderId,
+      versionId: data.versionId,
+      scheduledPublishAt: data.scheduledPublishAt.toISOString(), // Convert to UTC
+    }),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json();
+    throw new Error(errorData.message || "Failed to schedule publication");
+  }
+
+  return res.json();
+}
+
+/**
+ * Cancel scheduled publish for an article version
+ * @param orderId - The order ID
+ * @param versionId - The version ID
+ */
+export async function cancelScheduledPublication(data: {
+  orderId: string;
+  versionId: string;
+}): Promise<{
+  success: boolean;
+  message: string;
+}> {
+  const res = await fetch(`${API_BASE}/purchase/schedule/${data.orderId}`, {
+    method: "DELETE",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      versionId: data.versionId,
+    }),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json();
+    throw new Error(errorData.message || "Failed to cancel schedule");
+  }
+
+  return res.json();
+}
+
+/**
+ * Reschedule an article version for different publish time
+ * @param orderId - The order ID
+ * @param versionId - The version ID
+ * @param newScheduledPublishAt - New date object (will be converted to UTC ISO string)
+ */
+export async function reschedulePublication(data: {
+  orderId: string;
+  versionId: string;
+  scheduledPublishAt: Date;
+}): Promise<{
+  success: boolean;
+  message: string;
+  scheduledPublishAt: string;
+  jobId: string;
+}> {
+  const res = await fetch(`${API_BASE}/purchase/schedule/${data.orderId}`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      versionId: data.versionId,
+      scheduledPublishAt: data.scheduledPublishAt.toISOString(), // Convert to UTC
+    }),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json();
+    throw new Error(errorData.message || "Failed to reschedule publication");
+  }
+
+  return res.json();
 }

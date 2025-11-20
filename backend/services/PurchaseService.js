@@ -1,6 +1,7 @@
 const prisma = require('../db/prisma');
 const BacklinkService = require('./BacklinkService');
 const EmailService = require('./EmailService');
+const QueueService = require('./queue/QueueService');
 const crypto = require('crypto');
 
 /**
@@ -11,6 +12,7 @@ class PurchaseService {
     constructor() {
         this.backlinkService = new BacklinkService();
         this.emailService = new EmailService();
+        this.queueService = new QueueService();
     }
 
     /**
@@ -970,9 +972,11 @@ class PurchaseService {
      * Submit customer backlink for admin review
      * @param {string} orderId - The order ID
      * @param {string} versionId - The version ID to submit
+     * @param {Date|string|null} scheduledPublishAt - Optional scheduled publish time
+     * @param {string} scheduledBy - Who scheduled it (customer email or 'admin')
      * @returns {Promise<Object>} Submission result
      */
-    async submitCustomerBacklinkForReview(orderId, versionId) {
+    async submitCustomerBacklinkForReview(orderId, versionId, scheduledPublishAt = null, scheduledBy = null) {
         if (!orderId || !versionId) {
             throw new Error('Order ID and version ID are required');
         }
@@ -983,7 +987,8 @@ class PurchaseService {
                 where: { id: orderId },
                 include: { 
                     article: true,
-                    version: true
+                    version: true,
+                    session: true
                 }
             });
 
@@ -995,49 +1000,106 @@ class PurchaseService {
                 throw new Error('Version ID does not match order');
             }
 
-            // Update order status to admin review
+            // Validate scheduled time if provided
+            let scheduledDate = null;
+            if (scheduledPublishAt) {
+                scheduledDate = new Date(scheduledPublishAt);
+                if (isNaN(scheduledDate.getTime())) {
+                    throw new Error('Invalid scheduled publish date');
+                }
+                if (scheduledDate <= new Date()) {
+                    throw new Error('Scheduled publish date must be in the future');
+                }
+            }
+
+            // Update order status to admin review and schedule if provided
+            const orderUpdateData = {
+                status: 'ADMIN_REVIEW'
+            };
+
+            if (scheduledDate) {
+                orderUpdateData.scheduled_publish_at = scheduledDate;
+                orderUpdateData.scheduled_status = 'SCHEDULED';
+            }
+
             await prisma.order.update({
                 where: { id: orderId },
-                data: {
-                    status: 'ADMIN_REVIEW'
-                }
+                data: orderUpdateData
             });
 
             // Update the article version to indicate it's ready for review
+            const versionUpdateData = {
+                backlink_review_status: 'PENDING_REVIEW',
+                last_qc_status: 'CUSTOMER_SUBMITTED',
+                last_qc_notes: {
+                    message: scheduledDate 
+                        ? `Customer submitted content for admin review with scheduled publish: ${scheduledDate.toISOString()}`
+                        : 'Customer submitted content for admin review',
+                    type: 'customer_submission',
+                    timestamp: new Date().toISOString(),
+                    scheduledPublish: scheduledDate ? scheduledDate.toISOString() : null
+                }
+            };
+
+            if (scheduledDate) {
+                versionUpdateData.scheduled_publish_at = scheduledDate;
+                versionUpdateData.scheduled_status = 'SCHEDULED';
+                versionUpdateData.scheduled_by = scheduledBy || order.customer_email || order.session?.email || 'customer';
+            }
+
             await prisma.articleVersion.update({
                 where: { id: versionId },
-                data: {
-                    backlink_review_status: 'PENDING_REVIEW',
-                    last_qc_status: 'CUSTOMER_SUBMITTED',
-                    last_qc_notes: {
-                        message: 'Customer submitted content for admin review',
-                        type: 'customer_submission',
-                        timestamp: new Date().toISOString()
-                    }
-                }
+                data: versionUpdateData
             });
+
+            // If scheduled, add to queue
+            if (scheduledDate) {
+                const job = await this.queueService.addScheduledPublishJob({
+                    versionId,
+                    orderId,
+                    articleId: order.article_id,
+                    domainName: order.article?.domain?.name,
+                    scheduledAt: scheduledDate.getTime()
+                });
+
+                // Update version with job ID
+                await prisma.articleVersion.update({
+                    where: { id: versionId },
+                    data: { scheduled_job_id: job.id }
+                });
+
+                console.log(`Scheduled publish job created: ${job.id} for version ${versionId} at ${scheduledDate.toISOString()}`);
+            }
 
             // Send notification email to customer
             try {
                 await this.emailService.sendOrderConfirmation(
-                    order.customer_email,
+                    order.customer_email || order.session?.email,
                     {
                         id: order.id,
                         status: 'ADMIN_REVIEW',
                         articleTitle: order.article.topic || order.article.slug,
-                        backlinkData: order.backlink_data
+                        backlinkData: order.backlink_data,
+                        scheduledPublish: scheduledDate ? scheduledDate.toISOString() : null
                     }
                 );
             } catch (emailError) {
-                console.warn('Failed to send review submission confirmation email:', emailError.message);
+                console.warn('Failed to send review submission confirmation email:', emailError.message, {
+                    orderId: order.id,
+                    email: order.customer_email || order.session?.email,
+                    backlink_data: order.backlink_data
+                });
             }
 
-            console.log(`Customer backlink submitted for review: order ${orderId}, version ${versionId}`);
+            console.log(`Customer backlink submitted for review: order ${orderId}, version ${versionId}${scheduledDate ? `, scheduled for ${scheduledDate.toISOString()}` : ''}`);
 
             return {
                 reviewId: versionId,
                 status: 'ADMIN_REVIEW',
-                message: 'Article submitted for admin review successfully'
+                message: scheduledDate 
+                    ? `Article submitted for admin review and scheduled for publish at ${scheduledDate.toISOString()}`
+                    : 'Article submitted for admin review successfully',
+                scheduledPublish: scheduledDate ? scheduledDate.toISOString() : null
             };
 
         } catch (error) {
@@ -1763,6 +1825,275 @@ class PurchaseService {
         } catch (error) {
             console.error('Failed to get bulk order status:', error);
             throw new Error(`Failed to get bulk order status: ${error.message}`);
+        }
+    }
+
+    /**
+     * Schedule article version for future publish
+     * @param {string} orderId - The order ID
+     * @param {string} versionId - The version ID to schedule
+     * @param {Date|string} scheduledPublishAt - When to publish
+     * @param {string} scheduledBy - Who scheduled it (customer email or 'admin')
+     * @returns {Promise<Object>} Schedule result
+     */
+    async scheduleVersion(orderId, versionId, scheduledPublishAt, scheduledBy) {
+        if (!orderId || !versionId || !scheduledPublishAt) {
+            throw new Error('Order ID, version ID, and scheduled publish time are required');
+        }
+
+        try {
+            // Validate scheduled time
+            const scheduledDate = new Date(scheduledPublishAt);
+            if (isNaN(scheduledDate.getTime())) {
+                throw new Error('Invalid scheduled publish date');
+            }
+            if (scheduledDate <= new Date()) {
+                throw new Error('Scheduled publish date must be in the future');
+            }
+
+            // Get order and validate
+            const order = await prisma.order.findUnique({
+                where: { id: orderId },
+                include: { 
+                    version: true,
+                    session: true,
+                    article: {
+                        include: {
+                            domain: true
+                        }
+                    }
+                }
+            });
+
+            if (!order) {
+                throw new Error('Order not found');
+            }
+
+            if (order.version_id !== versionId) {
+                throw new Error('Version ID does not match order');
+            }
+
+            // Check if version is in correct status (ADMIN_REVIEW or later)
+            if (!['ADMIN_REVIEW', 'COMPLETED'].includes(order.status)) {
+                throw new Error(`Cannot schedule version in status: ${order.status}. Must be in ADMIN_REVIEW or COMPLETED status.`);
+            }
+
+            // Cancel existing schedule if any
+            if (order.version.scheduled_job_id) {
+                try {
+                    await this.queueService.cancelScheduledPublishJob(order.version.scheduled_job_id);
+                } catch (err) {
+                    console.warn('Failed to cancel existing schedule:', err.message);
+                }
+            }
+
+            // Add to queue
+            const job = await this.queueService.addScheduledPublishJob({
+                versionId,
+                orderId,
+                articleId: order.article_id,
+                domainName: order.article?.domain?.name,
+                scheduledAt: scheduledDate.getTime()
+            });
+
+            // Update version and order
+            await prisma.$transaction([
+                prisma.articleVersion.update({
+                    where: { id: versionId },
+                    data: {
+                        scheduled_publish_at: scheduledDate,
+                        scheduled_status: 'SCHEDULED',
+                        scheduled_job_id: job.id,
+                        scheduled_by: scheduledBy || order.customer_email || order.session?.email || 'admin'
+                    }
+                }),
+                prisma.order.update({
+                    where: { id: orderId },
+                    data: {
+                        scheduled_publish_at: scheduledDate,
+                        scheduled_status: 'SCHEDULED'
+                    }
+                })
+            ]);
+
+            console.log(`Version ${versionId} scheduled for publish at ${scheduledDate.toISOString()}, job ID: ${jobId}`);
+
+            return {
+                versionId,
+                orderId,
+                scheduledPublishAt: scheduledDate.toISOString(),
+                jobId,
+                message: 'Article scheduled for publish successfully'
+            };
+
+        } catch (error) {
+            console.error(`Failed to schedule version ${versionId}:`, error);
+            throw new Error(`Failed to schedule version: ${error.message}`);
+        }
+    }
+
+    /**
+     * Cancel scheduled publish for an article version
+     * @param {string} orderId - The order ID
+     * @param {string} versionId - The version ID to cancel schedule for
+     * @returns {Promise<Object>} Cancellation result
+     */
+    async cancelScheduledVersion(orderId, versionId) {
+        if (!orderId || !versionId) {
+            throw new Error('Order ID and version ID are required');
+        }
+
+        try {
+            // Get order and version
+            const order = await prisma.order.findUnique({
+                where: { id: orderId },
+                include: { version: true }
+            });
+
+            if (!order) {
+                throw new Error('Order not found');
+            }
+
+            if (order.version_id !== versionId) {
+                throw new Error('Version ID does not match order');
+            }
+
+            if (!order.version.scheduled_job_id) {
+                throw new Error('No scheduled publish found for this version');
+            }
+
+            // Cancel queue job
+            await this.queueService.cancelScheduledPublishJob(order.version.scheduled_job_id);
+
+            // Update version and order
+            await prisma.$transaction([
+                prisma.articleVersion.update({
+                    where: { id: versionId },
+                    data: {
+                        scheduled_publish_at: null,
+                        scheduled_status: 'CANCELLED',
+                        scheduled_job_id: null
+                    }
+                }),
+                prisma.order.update({
+                    where: { id: orderId },
+                    data: {
+                        scheduled_publish_at: null,
+                        scheduled_status: 'CANCELLED'
+                    }
+                })
+            ]);
+
+            console.log(`Cancelled scheduled publish for version ${versionId}`);
+
+            return {
+                versionId,
+                orderId,
+                message: 'Scheduled publish cancelled successfully'
+            };
+
+        } catch (error) {
+            console.error(`Failed to cancel schedule for version ${versionId}:`, error);
+            throw new Error(`Failed to cancel schedule: ${error.message}`);
+        }
+    }
+
+    /**
+     * Reschedule article version for different publish time
+     * @param {string} orderId - The order ID
+     * @param {string} versionId - The version ID to reschedule
+     * @param {Date|string} newScheduledPublishAt - New publish time
+     * @param {string} scheduledBy - Who rescheduled it
+     * @returns {Promise<Object>} Reschedule result
+     */
+    async rescheduleVersion(orderId, versionId, newScheduledPublishAt, scheduledBy) {
+        if (!orderId || !versionId || !newScheduledPublishAt) {
+            throw new Error('Order ID, version ID, and new scheduled publish time are required');
+        }
+
+        try {
+            // Validate new scheduled time
+            const newScheduledDate = new Date(newScheduledPublishAt);
+            if (isNaN(newScheduledDate.getTime())) {
+                throw new Error('Invalid scheduled publish date');
+            }
+            if (newScheduledDate <= new Date()) {
+                throw new Error('Scheduled publish date must be in the future');
+            }
+
+            // Get order and version
+            const order = await prisma.order.findUnique({
+                where: { id: orderId },
+                include: { 
+                    version: true,
+                    session: true,
+                    article: {
+                        include: {
+                            domain: true
+                        }
+                    }
+                }
+            });
+
+            if (!order) {
+                throw new Error('Order not found');
+            }
+
+            if (order.version_id !== versionId) {
+                throw new Error('Version ID does not match order');
+            }
+
+            // Cancel old job if exists
+            if (order.version.scheduled_job_id) {
+                try {
+                    await this.queueService.cancelScheduledPublishJob(order.version.scheduled_job_id);
+                } catch (err) {
+                    console.warn('Failed to cancel old schedule:', err.message);
+                }
+            }
+
+            // Add new scheduled job
+            const newJob = await this.queueService.addScheduledPublishJob({
+                versionId,
+                orderId,
+                articleId: order.article_id,
+                domainName: order.article?.domain?.name,
+                scheduledAt: newScheduledDate.getTime()
+            });
+
+            // Update version and order
+            await prisma.$transaction([
+                prisma.articleVersion.update({
+                    where: { id: versionId },
+                    data: {
+                        scheduled_publish_at: newScheduledDate,
+                        scheduled_status: 'SCHEDULED',
+                        scheduled_job_id: newJob.id,
+                        scheduled_by: scheduledBy || order.customer_email || order.session?.email || 'admin'
+                    }
+                }),
+                prisma.order.update({
+                    where: { id: orderId },
+                    data: {
+                        scheduled_publish_at: newScheduledDate,
+                        scheduled_status: 'SCHEDULED'
+                    }
+                })
+            ]);
+
+            console.log(`Version ${versionId} rescheduled for ${newScheduledDate.toISOString()}, new job ID: ${newJobId}`);
+
+            return {
+                versionId,
+                orderId,
+                scheduledPublishAt: newScheduledDate.toISOString(),
+                jobId: newJobId,
+                message: 'Article rescheduled successfully'
+            };
+
+        } catch (error) {
+            console.error(`Failed to reschedule version ${versionId}:`, error);
+            throw new Error(`Failed to reschedule version: ${error.message}`);
         }
     }
 

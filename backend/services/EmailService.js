@@ -105,8 +105,10 @@ class EmailService {
       try {
         console.log(`Sending ${emailType} email to ${emailData.to} (attempt ${attempt}/${this.maxRetries})`);
 
-        const result = await sgMail.send(emailData);
-
+        // const result = await sgMail.send(emailData);
+        console.log(`(Mock) Sending email to: ${emailData.to}, Subject: ${emailData.subject}`);
+        console.log(`emailData HTML: ${emailData.html.toString()}...`); // Log first 100 chars
+        const result = [{ headers: { 'x-message-id': 'mock-message-id-12345' } }]; // Mock result
         console.log(`Successfully sent ${emailType} email to ${emailData.to}`, {
           messageId: result[0]?.headers['x-message-id'],
           attempt
@@ -254,6 +256,10 @@ class EmailService {
    * @private
    */
   _generateOrderConfirmationTemplate(orderData) {
+    const backlinkData = orderData.backlink_data || orderData.backlinkData || {};
+    const keyword = backlinkData.keyword || backlinkData.anchorText || 'N/A';
+    const targetUrl = backlinkData.target_url || backlinkData.targetUrl || 'N/A';
+
     return `
       <!DOCTYPE html>
       <html>
@@ -280,8 +286,8 @@ class EmailService {
           <h3>Order Details</h3>
           <p><strong>Order ID:</strong> ${orderData.id}</p>
           <p><strong>Article:</strong> ${orderData.articleTitle || 'Selected Article'}</p>
-          <p><strong>Keyword:</strong> ${orderData.backlink_data.keyword}</p>
-          <p><strong>Target URL:</strong> ${orderData.backlink_data.target_url}</p>
+          <p><strong>Keyword:</strong> ${keyword}</p>
+          <p><strong>Target URL:</strong> ${targetUrl}</p>
           <p><strong>Amount Paid:</strong> $15.00</p>
           <p><strong>Order Date:</strong> ${new Date(orderData.created_at).toLocaleDateString()}</p>
         </div>
@@ -571,6 +577,11 @@ class EmailService {
    * @private
    */
   _generateBacklinkIntegratedTemplate(backlinkData) {
+    const bk = backlinkData || {};
+    const articleSlug = bk.articleSlug || bk.article_slug || 'Article';
+    const viewUrl = bk.viewUrl || bk.previewUrl || '#';
+    const orderId = bk.orderId || bk.order_id || 'N/A';
+    const articleId = bk.articleId || bk.article_id || 'N/A';
     return `
       <!DOCTYPE html>
       <html>
@@ -589,7 +600,7 @@ class EmailService {
         </div>
         
         <div class="content">
-          <p>Great news! Your backlink has been successfully integrated into the article "${backlinkData.articleSlug}".</p>
+          <p>Great news! Your backlink has been successfully integrated into the article "${articleSlug}".</p>
           
           <p><strong>What's next?</strong></p>
           <ol>
@@ -600,11 +611,11 @@ class EmailService {
           </ol>
           
           <p style="text-align: center;">
-            <a href="${backlinkData.viewUrl}" class="button">Review Your Backlink</a>
+            <a href="${viewUrl}" class="button">Review Your Backlink</a>
           </p>
           
-          <p><strong>Order ID:</strong> ${backlinkData.orderId}</p>
-          <p><strong>Article ID:</strong> ${backlinkData.articleId}</p>
+          <p><strong>Order ID:</strong> ${orderId}</p>
+          <p><strong>Article ID:</strong> ${articleId}</p>
           
           <p>Don't worry - you can request revisions if you'd like any changes to the integration.</p>
         </div>
@@ -925,6 +936,356 @@ class EmailService {
       </body>
       </html>
     `;
+  }
+
+  /**
+   * Send bulk article generation confirmation email
+   * @param {string} email - Customer email
+   * @param {Object} data - { sessionId, orders, totalPaid, statusUrl, magicLink (optional), articleCount (optional) }
+   */
+  async sendBulkGenerationConfirmation(email, data) {
+    // Detect if this is a pre-payment magic link email or post-payment confirmation
+    const isPrePayment = !!data.magicLink;
+    
+    // Different subject based on payment status
+    const subject = isPrePayment 
+      ? `Verify Your Email - ${data.articleCount || data.orders?.length || 0} Article Request`
+      : `Order Confirmation - ${data.orders.length} Articles Ordered`;
+    
+    // Choose theme color based on payment status
+    const themeColor = isPrePayment ? '#9333EA' : '#4CAF50'; // Purple for pre-payment, green for post-payment
+    const emoji = isPrePayment ? '📧' : '🎉';
+    const headerText = isPrePayment ? 'Verify Your Email to Continue' : 'Thank You for Your Order!';
+    
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background-color: ${themeColor}; color: white; padding: 20px; text-align: center; }
+          .content { padding: 20px; background-color: #f9f9f9; }
+          .order-item { background-color: white; padding: 15px; margin: 10px 0; border-left: 4px solid ${themeColor}; }
+          .button { display: inline-block; padding: 12px 24px; background-color: ${themeColor}; color: white; text-decoration: none; border-radius: 4px; margin: 10px 0; }
+          .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
+          .price { font-size: 24px; font-weight: bold; color: ${themeColor}; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>${emoji} ${headerText}</h1>
+          </div>
+          
+          <div class="content">
+            ${isPrePayment ? `
+              <p>Thank you for requesting ${data.articleCount || data.orders?.length || 0} custom article(s)!</p>
+              
+              <p>To complete your order, please verify your email address by clicking the button below:</p>
+              
+              <p style="text-align: center; margin: 30px 0;">
+                <a href="${data.magicLink}" class="button">Verify Email & Pay Now</a>
+              </p>
+              
+              <h3>Your Request Summary</h3>
+              ${data.orders ? data.orders.map((order, index) => `
+                <div class="order-item">
+                  <strong>Article ${index + 1}</strong><br>
+                  Topic: ${order.articleTopic || 'Custom Article'}<br>
+                  Domain: ${order.domainName || 'N/A'}
+                </div>
+              `).join('') : `
+                <div class="order-item">
+                  <strong>${data.articleCount || 0} article(s) requested for the same domain</strong><br>
+                  Total Price: $${((data.articleCount || 0) * 25).toFixed(2)}
+                </div>
+              `}
+              
+              <h3>Next Steps</h3>
+              <ol>
+                <li>Click the verification link above (expires in 24 hours)</li>
+                <li>Complete your payment securely via Stripe</li>
+                <li>We'll start generating your articles immediately</li>
+                <li>Track progress and review articles when ready</li>
+              </ol>
+              
+              <p style="margin-top: 30px; padding: 15px; background-color: #fff3cd; border-left: 4px solid #ffc107;">
+                <strong>⏰ Important:</strong> This verification link will expire in 24 hours. Please complete your payment soon to secure your order.
+              </p>
+            ` : `
+              <p>Your payment has been successfully processed. We're now generating ${data.orders.length} article(s) for you.</p>
+              
+              <h3>Order Summary</h3>
+              ${data.orders.map((order, index) => `
+                <div class="order-item">
+                  <strong>Article ${index + 1}</strong><br>
+                  Topic: ${order.articleTopic || 'Custom Article'}<br>
+                  Domain: ${order.domainName || 'N/A'}<br>
+                  Status: Processing
+                </div>
+              `).join('')}
+              
+              <div style="margin: 20px 0;">
+                <p><strong>Total Paid:</strong> <span class="price">$${data.totalPaid.toFixed(2)}</span></p>
+              </div>
+              
+              <h3>What's Next?</h3>
+              <ol>
+                <li>Our AI will generate high-quality articles based on your specifications</li>
+                <li>Each article will go through quality checks</li>
+                <li>You'll receive an email notification when articles are ready for review</li>
+                <li>Review and approve each article before publication</li>
+              </ol>
+              
+              <p style="text-align: center;">
+                <a href="${data.statusUrl}" class="button">Track Your Orders</a>
+              </p>
+              
+              <p style="margin-top: 30px; padding: 15px; background-color: #fff3cd; border-left: 4px solid #ffc107;">
+                <strong>⏱️ Processing Time:</strong> Articles typically take 5-15 minutes to generate, depending on complexity and current queue length.
+              </p>
+            `}
+          </div>
+          
+          <div class="footer">
+            <p>Session ID: ${data.sessionId}</p>
+            ${isPrePayment ? `
+              <p style="color: #666; margin-top: 10px;">
+                <strong>Can't see the button?</strong> Copy and paste this link into your browser:<br>
+                <span style="font-size: 11px; word-break: break-all;">${data.magicLink}</span>
+              </p>
+            ` : ''}
+            <p>Need help? Contact our support team.</p>
+            <p>This is an automated email. Please do not reply to this message.</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const emailData = {
+      from: this.fromEmail,
+      to: email,
+      subject,
+      html
+    };
+
+    await this._sendEmailWithRetry(emailData, isPrePayment ? 'bulk_generation_magic_link' : 'bulk_generation_confirmation');
+    console.log(`Bulk generation ${isPrePayment ? 'magic link' : 'confirmation'} email sent to ${email}`);
+  }
+
+  /**
+   * Send article published notification (for scheduled publish)
+   * @param {string} email - Customer email
+   * @param {Object} data - Article details { orderId, articleId, articleTitle, articleUrl, domainName }
+   * @returns {Promise<void>}
+   */
+  async sendArticlePublishedEmail(email, data) {
+    const subject = '🎉 Your Article is Now Live!';
+    
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <style>
+          .container { max-width: 600px; margin: 0 auto; font-family: Arial, sans-serif; }
+          .header { background-color: #10b981; color: white; padding: 20px; text-align: center; }
+          .content { padding: 30px; background-color: #f9fafb; }
+          .button { background-color: #10b981; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block; margin: 20px 0; }
+          .footer { padding: 20px; text-align: center; color: #6b7280; font-size: 12px; }
+          .success-box { background-color: #d1fae5; border-left: 4px solid #10b981; padding: 15px; margin: 20px 0; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>✅ Article Published Successfully!</h1>
+          </div>
+          
+          <div class="content">
+            <h2>Great News!</h2>
+            <p>Your scheduled article has been published and is now live on the web.</p>
+            
+            <div class="success-box">
+              <strong>Article Details:</strong><br>
+              Title: ${data.articleTitle || 'Your Article'}<br>
+              Domain: ${data.domainName || 'N/A'}<br>
+              Order ID: ${data.orderId}
+            </div>
+            
+            <p style="text-align: center;">
+              <a href="${data.articleUrl}" class="button">View Live Article</a>
+            </p>
+            
+            <h3>What's Next?</h3>
+            <ul>
+              <li>Your article is now indexed and discoverable</li>
+              <li>Backlinks are active and providing SEO value</li>
+              <li>Monitor your analytics for traffic insights</li>
+            </ul>
+            
+            <p style="margin-top: 30px;">
+              Thank you for choosing our service! If you need any changes or have questions, please contact our support team.
+            </p>
+          </div>
+          
+          <div class="footer">
+            <p>Order ID: ${data.orderId}</p>
+            <p>This is an automated email. Please do not reply to this message.</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const emailData = {
+      from: this.fromEmail,
+      to: email,
+      subject,
+      html
+    };
+
+    await this._sendEmailWithRetry(emailData, 'article_published');
+    console.log(`Article published email sent to ${email} for order ${data.orderId}`);
+  }
+
+  /**
+   * Send schedule cancelled notification
+   * @param {string} email - Customer email
+   * @param {Object} data - Cancellation details { orderId, articleTitle, reason }
+   * @returns {Promise<void>}
+   */
+  async sendScheduleCancelledEmail(email, data) {
+    const subject = 'Scheduled Publish Cancelled';
+    
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <style>
+          .container { max-width: 600px; margin: 0 auto; font-family: Arial, sans-serif; }
+          .header { background-color: #f59e0b; color: white; padding: 20px; text-align: center; }
+          .content { padding: 30px; background-color: #f9fafb; }
+          .footer { padding: 20px; text-align: center; color: #6b7280; font-size: 12px; }
+          .warning-box { background-color: #fef3c7; border-left: 4px solid #f59e0b; padding: 15px; margin: 20px 0; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>⚠️ Scheduled Publish Cancelled</h1>
+          </div>
+          
+          <div class="content">
+            <p>The scheduled publish for your article has been cancelled.</p>
+            
+            <div class="warning-box">
+              <strong>Article Details:</strong><br>
+              Title: ${data.articleTitle || 'Your Article'}<br>
+              Order ID: ${data.orderId}<br>
+              ${data.reason ? `Reason: ${data.reason}` : ''}
+            </div>
+            
+            <p>Your article content is still saved and available for review. You can reschedule publication at any time through your order dashboard.</p>
+            
+            <p style="margin-top: 30px;">
+              If you have any questions or need assistance, please contact our support team.
+            </p>
+          </div>
+          
+          <div class="footer">
+            <p>Order ID: ${data.orderId}</p>
+            <p>This is an automated email. Please do not reply to this message.</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const emailData = {
+      from: this.fromEmail,
+      to: email,
+      subject,
+      html
+    };
+
+    await this._sendEmailWithRetry(emailData, 'schedule_cancelled');
+    console.log(`Schedule cancelled email sent to ${email} for order ${data.orderId}`);
+  }
+
+  /**
+   * Send schedule failed notification
+   * @param {string} email - Customer email
+   * @param {Object} data - Failure details { orderId, articleTitle, error }
+   * @returns {Promise<void>}
+   */
+  async sendScheduleFailedEmail(email, data) {
+    const subject = '❌ Scheduled Publish Failed';
+    
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <style>
+          .container { max-width: 600px; margin: 0 auto; font-family: Arial, sans-serif; }
+          .header { background-color: #ef4444; color: white; padding: 20px; text-align: center; }
+          .content { padding: 30px; background-color: #f9fafb; }
+          .button { background-color: #3b82f6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block; margin: 20px 0; }
+          .footer { padding: 20px; text-align: center; color: #6b7280; font-size: 12px; }
+          .error-box { background-color: #fee2e2; border-left: 4px solid #ef4444; padding: 15px; margin: 20px 0; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>⚠️ Publication Issue</h1>
+          </div>
+          
+          <div class="content">
+            <p>We encountered an issue while attempting to publish your scheduled article.</p>
+            
+            <div class="error-box">
+              <strong>Article Details:</strong><br>
+              Title: ${data.articleTitle || 'Your Article'}<br>
+              Order ID: ${data.orderId}<br>
+              ${data.error ? `Error: ${data.error}` : 'An unexpected error occurred'}
+            </div>
+            
+            <p><strong>What's Happening:</strong></p>
+            <ul>
+              <li>Our team has been automatically notified</li>
+              <li>We're investigating the issue</li>
+              <li>Your article content is safe and preserved</li>
+            </ul>
+            
+            <p style="text-align: center;">
+              <a href="${data.supportUrl || '#'}" class="button">Contact Support</a>
+            </p>
+            
+            <p style="margin-top: 30px;">
+              We apologize for the inconvenience. Our support team will reach out to you shortly to resolve this issue.
+            </p>
+          </div>
+          
+          <div class="footer">
+            <p>Order ID: ${data.orderId}</p>
+            <p>This is an automated email. Please do not reply to this message.</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const emailData = {
+      from: this.fromEmail,
+      to: email,
+      subject,
+      html
+    };
+
+    await this._sendEmailWithRetry(emailData, 'schedule_failed');
+    console.log(`Schedule failed email sent to ${email} for order ${data.orderId}`);
   }
 }
 

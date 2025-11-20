@@ -30,6 +30,11 @@ router.post('/request-revision', purchaseController.requestRevision);
 // Submit for review (works for both backlinks and articles)
 router.post('/submit-for-review', purchaseController.submitForReview);
 
+// Scheduling endpoints
+router.post('/schedule', purchaseController.scheduleVersion);
+router.delete('/schedule/:orderId', purchaseController.cancelSchedule);
+router.put('/schedule/:orderId', purchaseController.rescheduleVersion);
+
 // Stripe webhook endpoint (raw body middleware applied at app level)
 router.post('/webhook', purchaseController.handleWebhook);
 

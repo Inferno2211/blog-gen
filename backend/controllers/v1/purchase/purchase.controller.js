@@ -1012,7 +1012,7 @@ class PurchaseController {
      */
     async submitForReview(req, res, next) {
         try {
-            const { orderId, versionId } = req.body;
+            const { orderId, versionId, scheduledPublishAt } = req.body;
 
             // Validate required fields
             if (!orderId) {
@@ -1022,16 +1022,30 @@ class PurchaseController {
                 throw new ValidationError('Version ID is required');
             }
 
-            // Submit for review
+            // Validate scheduled time if provided
+            if (scheduledPublishAt) {
+                const scheduledDate = new Date(scheduledPublishAt);
+                if (isNaN(scheduledDate.getTime())) {
+                    throw new ValidationError('Invalid scheduled publish date format');
+                }
+                if (scheduledDate <= new Date()) {
+                    throw new ValidationError('Scheduled publish date must be in the future');
+                }
+            }
+
+            // Submit for review with optional schedule
             const result = await this.purchaseService.submitCustomerBacklinkForReview(
                 orderId,
-                versionId
+                versionId,
+                scheduledPublishAt || null,
+                req.body.scheduledBy || null
             );
 
             res.status(200).json({
                 success: true,
-                message: 'Article submitted for admin review successfully',
-                reviewId: result.reviewId
+                message: result.message,
+                reviewId: result.reviewId,
+                scheduledPublish: result.scheduledPublish || null
             });
 
         } catch (error) {
@@ -1444,5 +1458,20 @@ module.exports = {
     async getBulkOrderStatus(req, res, next) {
         const controller = new PurchaseController();
         return controller.getBulkOrderStatus(req, res, next);
+    },
+
+    async scheduleVersion(req, res, next) {
+        const controller = new PurchaseController();
+        return controller.scheduleVersion(req, res, next);
+    },
+
+    async cancelSchedule(req, res, next) {
+        const controller = new PurchaseController();
+        return controller.cancelSchedule(req, res, next);
+    },
+
+    async rescheduleVersion(req, res, next) {
+        const controller = new PurchaseController();
+        return controller.rescheduleVersion(req, res, next);
     }
 };

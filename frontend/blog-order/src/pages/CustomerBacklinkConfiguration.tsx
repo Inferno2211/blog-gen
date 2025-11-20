@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
+import DatePicker from "react-datepicker";
+import "react-datepicker/dist/react-datepicker.css";
 import { parseMarkdownWithFrontmatter } from "../utils/markdownParser";
 import BlogLayout from "../components/BlogLayout";
 import {
@@ -72,6 +74,10 @@ const CustomerBacklinkConfiguration: React.FC = () => {
   const [orderDetails, setOrderDetails] = useState<OrderDetails | null>(null);
   const [generatedVersion, setGeneratedVersion] =
     useState<BacklinkConfigurationResponse | null>(null);
+
+  // Scheduling state
+  const [scheduleEnabled, setScheduleEnabled] = useState(false);
+  const [scheduledDate, setScheduledDate] = useState<Date | null>(null);
 
   const [formData, setFormData] = useState<BacklinkConfigurationRequest>({
     orderId: "",
@@ -185,13 +191,25 @@ const CustomerBacklinkConfiguration: React.FC = () => {
     setError(null);
 
     try {
-      await customerSubmitForReview({
+      const submitData: any = {
         orderId: formData.orderId,
         versionId: generatedVersion.versionId,
-      });
-      setSuccess(
-        "Your article has been submitted for admin review. You will be notified via email once it's approved and published."
-      );
+      };
+
+      // Add scheduledPublishAt if scheduling is enabled
+      if (scheduleEnabled && scheduledDate) {
+        submitData.scheduledPublishAt = scheduledDate.toISOString();
+      }
+
+      const result = await customerSubmitForReview(submitData);
+
+      const successMessage = result.scheduledPublish
+        ? `Your article has been submitted for admin review and scheduled for publish at ${new Date(
+            result.scheduledPublish
+          ).toLocaleString()}.`
+        : "Your article has been submitted for admin review. You will be notified via email once it's approved and published.";
+
+      setSuccess(successMessage);
 
       // Redirect to a thank you page after 3 seconds
       setTimeout(() => {
@@ -324,6 +342,84 @@ const CustomerBacklinkConfiguration: React.FC = () => {
                   content={parsed.content}
                 />
               </div>
+            </div>
+
+            {/* Scheduling Section */}
+            <div className="border rounded-lg bg-white p-4 mt-4">
+              <label className="flex items-center gap-2 text-sm font-medium text-gray-700 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={scheduleEnabled}
+                  onChange={(e) => {
+                    setScheduleEnabled(e.target.checked);
+                    if (!e.target.checked) {
+                      setScheduledDate(null);
+                    }
+                  }}
+                  className="rounded"
+                />
+                📅 Schedule publication for later
+              </label>
+
+              {scheduleEnabled && (
+                <div className="mt-4 space-y-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Publish Date & Time
+                    </label>
+                    <DatePicker
+                      selected={scheduledDate}
+                      onChange={(date: Date | null) => setScheduledDate(date)}
+                      showTimeSelect
+                      timeIntervals={1}
+                      timeCaption="Time"
+                      dateFormat="PPpp"
+                      minDate={new Date()}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholderText="Select date and time"
+                      required={scheduleEnabled}
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Time shown in your local timezone. Will be published at
+                      the scheduled time.
+                    </p>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const date = new Date();
+                        date.setMonth(date.getMonth() + 1);
+                        setScheduledDate(date);
+                      }}
+                      className="px-3 py-1.5 text-sm bg-blue-50 text-blue-700 rounded hover:bg-blue-100 border border-blue-200"
+                    >
+                      1 Month
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const date = new Date();
+                        date.setMonth(date.getMonth() + 2);
+                        setScheduledDate(date);
+                      }}
+                      className="px-3 py-1.5 text-sm bg-blue-50 text-blue-700 rounded hover:bg-blue-100 border border-blue-200"
+                    >
+                      2 Months
+                    </button>
+                  </div>
+
+                  {scheduledDate && (
+                    <div className="bg-blue-50 border border-blue-200 rounded p-3">
+                      <p className="text-sm text-blue-900">
+                        <strong>Scheduled for:</strong>{" "}
+                        {scheduledDate.toLocaleString()}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="flex gap-2 mt-3">

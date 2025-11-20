@@ -6,12 +6,89 @@ import {
   customerSubmitForReview,
   customerRegenerateArticle,
   customerSubmitArticleForReview,
+  cancelScheduledPublication,
+  reschedulePublication,
 } from "../services/purchaseService";
 import type { OrderStatusResponse } from "../types/purchase";
 import LoadingSpinner from "../components/LoadingSpinner";
 import ErrorMessage from "../components/ErrorMessage";
 import BlogLayout from "../components/BlogLayout";
 import { parseMarkdownWithFrontmatter } from "../utils/markdownParser";
+import DatePicker from "react-datepicker";
+import "react-datepicker/dist/react-datepicker.css";
+
+// Countdown Timer Component
+function CountdownTimer({ targetDate }: { targetDate: string }) {
+  const [timeLeft, setTimeLeft] = useState<{
+    days: number;
+    hours: number;
+    minutes: number;
+    seconds: number;
+  } | null>(null);
+
+  useEffect(() => {
+    const calculateTimeLeft = () => {
+      const difference = new Date(targetDate).getTime() - new Date().getTime();
+
+      if (difference > 0) {
+        return {
+          days: Math.floor(difference / (1000 * 60 * 60 * 24)),
+          hours: Math.floor((difference / (1000 * 60 * 60)) % 24),
+          minutes: Math.floor((difference / 1000 / 60) % 60),
+          seconds: Math.floor((difference / 1000) % 60),
+        };
+      }
+
+      return null;
+    };
+
+    // Initial calculation
+    setTimeLeft(calculateTimeLeft());
+
+    // Update every second
+    const timer = setInterval(() => {
+      setTimeLeft(calculateTimeLeft());
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [targetDate]);
+
+  if (!timeLeft) {
+    return (
+      <p className="text-center text-green-600 font-semibold">
+        🎉 Publish time reached! Article will be published shortly.
+      </p>
+    );
+  }
+
+  return (
+    <div className="flex justify-center gap-4">
+      <div className="text-center">
+        <div className="text-2xl font-bold text-blue-600">{timeLeft.days}</div>
+        <div className="text-xs text-gray-600">Days</div>
+      </div>
+      <div className="text-2xl font-bold text-blue-600">:</div>
+      <div className="text-center">
+        <div className="text-2xl font-bold text-blue-600">{timeLeft.hours}</div>
+        <div className="text-xs text-gray-600">Hours</div>
+      </div>
+      <div className="text-2xl font-bold text-blue-600">:</div>
+      <div className="text-center">
+        <div className="text-2xl font-bold text-blue-600">
+          {timeLeft.minutes}
+        </div>
+        <div className="text-xs text-gray-600">Minutes</div>
+      </div>
+      <div className="text-2xl font-bold text-blue-600">:</div>
+      <div className="text-center">
+        <div className="text-2xl font-bold text-blue-600">
+          {timeLeft.seconds}
+        </div>
+        <div className="text-xs text-gray-600">Seconds</div>
+      </div>
+    </div>
+  );
+}
 
 export default function OrderStatus() {
   const [searchParams] = useSearchParams();
@@ -23,6 +100,16 @@ export default function OrderStatus() {
   const [error, setError] = useState("");
   const [regenerating, setRegenerating] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  // Scheduling state
+  const [showRescheduleModal, setShowRescheduleModal] = useState(false);
+  const [newScheduledDate, setNewScheduledDate] = useState<Date | null>(null);
+  const [cancelling, setCancelling] = useState(false);
+  const [rescheduling, setRescheduling] = useState(false);
+
+  // Schedule with submission
+  const [scheduleEnabled, setScheduleEnabled] = useState(false);
+  const [scheduledDate, setScheduledDate] = useState<Date | null>(null);
 
   // Fetch order status
   const fetchOrderStatus = async () => {
@@ -192,17 +279,28 @@ export default function OrderStatus() {
         return String(bd.type).toUpperCase() === "ARTICLE_GENERATION";
       })();
 
-      if (isArticleOrder) {
-        await customerSubmitArticleForReview({
-          orderId,
-          versionId: orderData.order.version_id,
-        });
-      } else {
-        await customerSubmitForReview({
-          orderId,
-          versionId: orderData.order.version_id,
-        });
+      const submitData: any = {
+        orderId,
+        versionId: orderData.order.version_id,
+      };
+
+      // Include schedule if enabled
+      if (scheduleEnabled && scheduledDate) {
+        submitData.scheduledPublishAt = scheduledDate.toISOString();
       }
+
+      if (isArticleOrder) {
+        await customerSubmitArticleForReview(submitData);
+      } else {
+        await customerSubmitForReview(submitData);
+      }
+
+      if (scheduleEnabled && scheduledDate) {
+        alert(
+          `Article submitted for admin review and scheduled for publish at ${scheduledDate.toLocaleString()}`
+        );
+      }
+
       navigate("/review-submitted");
     } catch (err) {
       setError(
@@ -210,6 +308,63 @@ export default function OrderStatus() {
       );
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  // Handle cancel scheduled publish
+  const handleCancelSchedule = async () => {
+    if (!orderId || !orderData?.order.version_id) return;
+
+    if (
+      !confirm(
+        "Are you sure you want to cancel the scheduled publication? You can reschedule later."
+      )
+    ) {
+      return;
+    }
+
+    setCancelling(true);
+    setError("");
+
+    try {
+      await cancelScheduledPublication({
+        orderId,
+        versionId: orderData.order.version_id,
+      });
+      await fetchOrderStatus(); // Refresh to show updated status
+      alert("Scheduled publication cancelled successfully");
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to cancel schedule"
+      );
+    } finally {
+      setCancelling(false);
+    }
+  };
+
+  // Handle reschedule
+  const handleReschedule = async () => {
+    if (!orderId || !orderData?.order.version_id || !newScheduledDate) return;
+
+    setRescheduling(true);
+    setError("");
+
+    try {
+      await reschedulePublication({
+        orderId,
+        versionId: orderData.order.version_id,
+        scheduledPublishAt: newScheduledDate,
+      });
+      await fetchOrderStatus(); // Refresh to show updated time
+      setShowRescheduleModal(false);
+      setNewScheduledDate(null);
+      alert(
+        `Article rescheduled for publish at ${newScheduledDate.toLocaleString()}`
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to reschedule");
+    } finally {
+      setRescheduling(false);
     }
   };
 
@@ -401,6 +556,185 @@ export default function OrderStatus() {
           </div>
         </div>
 
+        {/* Scheduled Publication Section */}
+        {order.scheduled_publish_at &&
+          order.scheduled_status === "SCHEDULED" && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-6">
+              <h3 className="text-lg font-semibold text-blue-800 mb-3">
+                ⏰ Scheduled for Publication
+              </h3>
+              <div className="space-y-3">
+                <div>
+                  <p className="text-blue-700">
+                    <strong>Publish Date:</strong>{" "}
+                    {new Date(order.scheduled_publish_at).toLocaleString()}
+                  </p>
+                </div>
+
+                {/* Countdown Timer */}
+                <div className="bg-white border border-blue-200 rounded-lg p-4">
+                  <CountdownTimer targetDate={order.scheduled_publish_at} />
+                </div>
+
+                {/* Management Buttons */}
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <button
+                    onClick={handleCancelSchedule}
+                    disabled={cancelling}
+                    className="flex-1 bg-red-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {cancelling ? "Cancelling..." : "❌ Cancel Schedule"}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setNewScheduledDate(
+                        new Date(order.scheduled_publish_at!)
+                      );
+                      setShowRescheduleModal(true);
+                    }}
+                    className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700 transition-colors"
+                  >
+                    📅 Reschedule
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+        {/* Schedule Status Badges */}
+        {order.scheduled_status && order.scheduled_status !== "SCHEDULED" && (
+          <div
+            className={`rounded-lg p-4 mb-6 ${
+              order.scheduled_status === "PUBLISHED"
+                ? "bg-green-50 border border-green-200"
+                : order.scheduled_status === "CANCELLED"
+                ? "bg-gray-50 border border-gray-200"
+                : "bg-red-50 border border-red-200"
+            }`}
+          >
+            <p
+              className={`font-semibold ${
+                order.scheduled_status === "PUBLISHED"
+                  ? "text-green-800"
+                  : order.scheduled_status === "CANCELLED"
+                  ? "text-gray-800"
+                  : "text-red-800"
+              }`}
+            >
+              {order.scheduled_status === "PUBLISHED" &&
+                "✅ Published on schedule"}
+              {order.scheduled_status === "CANCELLED" &&
+                "⚠️ Schedule cancelled"}
+              {order.scheduled_status === "FAILED" &&
+                "❌ Scheduled publish failed"}
+            </p>
+            {order.scheduled_publish_at && (
+              <p
+                className={`text-sm mt-1 ${
+                  order.scheduled_status === "PUBLISHED"
+                    ? "text-green-700"
+                    : order.scheduled_status === "CANCELLED"
+                    ? "text-gray-700"
+                    : "text-red-700"
+                }`}
+              >
+                {order.scheduled_status === "PUBLISHED" && "Published at: "}
+                {order.scheduled_status === "CANCELLED" &&
+                  "Was scheduled for: "}
+                {order.scheduled_status === "FAILED" &&
+                  "Failed to publish at: "}
+                {new Date(order.scheduled_publish_at).toLocaleString()}
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Reschedule Modal */}
+        {showRescheduleModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+              <h3 className="text-xl font-bold text-gray-800 mb-4">
+                Reschedule Publication
+              </h3>
+
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  New Publish Date & Time
+                </label>
+                <DatePicker
+                  selected={newScheduledDate}
+                  onChange={(date: Date | null) => setNewScheduledDate(date)}
+                  showTimeSelect
+                  timeIntervals={1}
+                  timeCaption="Time"
+                  dateFormat="PPpp"
+                  minDate={new Date()}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholderText="Select new date and time"
+                  required
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  Time shown in your local timezone
+                </p>
+              </div>
+
+              {/* Preset Buttons */}
+              <div className="flex gap-2 mb-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const date = new Date();
+                    date.setMonth(date.getMonth() + 1);
+                    setNewScheduledDate(date);
+                  }}
+                  className="px-3 py-1.5 text-sm bg-blue-50 text-blue-700 rounded hover:bg-blue-100 border border-blue-200"
+                >
+                  1 Month
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const date = new Date();
+                    date.setMonth(date.getMonth() + 2);
+                    setNewScheduledDate(date);
+                  }}
+                  className="px-3 py-1.5 text-sm bg-blue-50 text-blue-700 rounded hover:bg-blue-100 border border-blue-200"
+                >
+                  2 Months
+                </button>
+              </div>
+
+              {newScheduledDate && (
+                <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <p className="text-sm text-blue-800">
+                    <strong>New schedule:</strong>{" "}
+                    {newScheduledDate.toLocaleString()}
+                  </p>
+                </div>
+              )}
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    setShowRescheduleModal(false);
+                    setNewScheduledDate(null);
+                  }}
+                  className="flex-1 bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-semibold hover:bg-gray-300 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleReschedule}
+                  disabled={!newScheduledDate || rescheduling}
+                  className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                >
+                  {rescheduling ? "Rescheduling..." : "Confirm Reschedule"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Article Content Preview (when in QUALITY_CHECK) */}
         {order.status === "QUALITY_CHECK" && content && (
           <div className="bg-white rounded-lg shadow-md p-6 mb-6">
@@ -418,6 +752,85 @@ export default function OrderStatus() {
                   parseMarkdownWithFrontmatter(content.contentMd).content
                 }
               />
+            </div>
+
+            {/* Scheduling Section */}
+            <div className="mb-6 p-4 border border-gray-200 rounded-lg">
+              <div className="flex items-center mb-3">
+                <input
+                  type="checkbox"
+                  id="schedule-publish"
+                  checked={scheduleEnabled}
+                  onChange={(e) => setScheduleEnabled(e.target.checked)}
+                  className="mr-2 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                />
+                <label
+                  htmlFor="schedule-publish"
+                  className="text-sm font-medium text-gray-700"
+                >
+                  📅 Schedule publication for later
+                </label>
+              </div>
+
+              {scheduleEnabled && (
+                <div className="ml-6 space-y-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Publish Date & Time
+                    </label>
+                    <DatePicker
+                      selected={scheduledDate}
+                      onChange={(date: Date | null) => setScheduledDate(date)}
+                      showTimeSelect
+                      timeIntervals={1}
+                      timeCaption="Time"
+                      dateFormat="PPpp"
+                      minDate={new Date()}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholderText="Select date and time"
+                      required={scheduleEnabled}
+                    />
+                    <p className="mt-1 text-xs text-gray-500">
+                      Time shown in your local timezone
+                    </p>
+                  </div>
+
+                  {/* Preset Buttons */}
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const date = new Date();
+                        date.setMonth(date.getMonth() + 1);
+                        setScheduledDate(date);
+                      }}
+                      className="px-3 py-1.5 text-sm bg-blue-50 text-blue-700 rounded hover:bg-blue-100 border border-blue-200"
+                    >
+                      1 Month
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const date = new Date();
+                        date.setMonth(date.getMonth() + 2);
+                        setScheduledDate(date);
+                      }}
+                      className="px-3 py-1.5 text-sm bg-blue-50 text-blue-700 rounded hover:bg-blue-100 border border-blue-200"
+                    >
+                      2 Months
+                    </button>
+                  </div>
+
+                  {scheduledDate && (
+                    <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                      <p className="text-sm text-blue-800">
+                        <strong>Scheduled for:</strong>{" "}
+                        {scheduledDate.toLocaleString()}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Action Buttons */}

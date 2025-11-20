@@ -125,6 +125,12 @@ model ArticleVersion {
   reviewed_by           String? // Admin ID who reviewed
   reviewed_at           DateTime? // When it was reviewed
 
+  // Scheduling fields
+  scheduled_publish_at  DateTime? @db.Timestamptz
+  scheduled_status      String?   @db.VarChar(30)  // SCHEDULED, CANCELLED, EXECUTED
+  scheduled_job_id      String?   @db.VarChar(255) @unique
+  scheduled_by          String?   // Email or session ID
+
   // main article this version belongs to
   article Article @relation("AllVersions", fields: [article_id], references: [id], onDelete: Cascade)
 
@@ -135,6 +141,7 @@ model ArticleVersion {
   orders Order[]
 
   @@unique([article_id, version_num])
+  @@index([scheduled_publish_at])
   @@map("article_versions")
 }
 
@@ -185,6 +192,10 @@ model Order {
   created_at            DateTime    @default(now()) @db.Timestamptz
   completed_at          DateTime?   @db.Timestamptz
   updated_at            DateTime    @updatedAt @db.Timestamptz
+
+  // Scheduling fields (mirrored from ArticleVersion)
+  scheduled_publish_at  DateTime? @db.Timestamptz
+  scheduled_status      String?   @db.VarChar(30)  // SCHEDULED, CANCELLED, EXECUTED
 
   // Relations
   session               PurchaseSession? @relation(fields: [session_id], references: [id], onDelete: Cascade)

@@ -69,6 +69,19 @@ class QueueService {
             }
         });
 
+        this.scheduledPublishQueue = new Queue('scheduled-publish', {
+            redis: redisConfig,
+            defaultJobOptions: {
+                attempts: 3,
+                backoff: {
+                    type: 'exponential',
+                    delay: 2000
+                },
+                removeOnComplete: 100,
+                removeOnFail: 500
+            }
+        });
+
         this._setupEventHandlers();
     }
 
@@ -78,7 +91,8 @@ class QueueService {
     _setupEventHandlers() {
         const queues = [
             this.articleGenerationQueue,
-            this.backlinkIntegrationQueue
+            this.backlinkIntegrationQueue,
+            this.scheduledPublishQueue
         ];
 
         queues.forEach(queue => {
@@ -106,6 +120,14 @@ class QueueService {
                 console.log(`⏳ Job ${jobId} is WAITING in queue ${queue.name}`);
             });
 
+            queue.on('delayed', (jobId, timestamp) => {
+                try {
+                    console.log(`⏳ Job ${jobId} is DELAYED until ${new Date(timestamp).toISOString()} in queue ${queue.name}`);
+                } catch (err) {
+                    console.log(`⏳ Job ${jobId} is DELAYED in queue ${queue.name}`);
+                }
+            });
+
             queue.on('active', (job) => {
                 console.log(`\n🔵 Job ${job.id} is now ACTIVE in queue ${queue.name}`);
                 console.log(`   Data: ${JSON.stringify(job.data, null, 2)}`);
@@ -116,7 +138,7 @@ class QueueService {
                 console.log(`   Result: ${JSON.stringify(result, null, 2)}\n`);
             });
 
-            queue.on('failed', (job, err) => {
+                queue.on('failed', (job, err) => {
                 console.error(`\n❌ Job ${job.id} FAILED in queue ${queue.name}`);
                 console.error(`   Error: ${err.message}`);
                 console.error(`   Stack: ${err.stack}\n`);
@@ -175,8 +197,68 @@ class QueueService {
     }
 
     /**
+     * Add scheduled publish job to queue
+     * @param {Object} jobData - { versionId, orderId, articleId, domainName, scheduledAt }
+     * @returns {Promise<Object>} Bull job object
+     */
+    async addScheduledPublishJob(jobData) {
+        console.log('╔═══════════════════════════════════════════════════════════════');
+        console.log('║ 📅 ADDING SCHEDULED PUBLISH JOB');
+        console.log('╠═══════════════════════════════════════════════════════════════');
+        console.log(`║ Version ID: ${jobData.versionId}`);
+        console.log(`║ Order ID: ${jobData.orderId}`);
+        console.log(`║ Article ID: ${jobData.articleId}`);
+        console.log(`║ Scheduled At: ${new Date(jobData.scheduledAt).toISOString()}`);
+        console.log('╚═══════════════════════════════════════════════════════════════\n');
+
+        const delay = Math.max(0, jobData.scheduledAt - Date.now());
+        const jobId = `scheduled-publish-v${jobData.versionId}`;
+
+        const job = await this.scheduledPublishQueue.add('publish-version', jobData, {
+            jobId,
+            delay,
+            priority: 10
+        });
+
+        console.log(`✅ Scheduled publish job ${job.id} added (delay: ${Math.round(delay / 1000)}s)\n`);
+        return job;
+    }
+
+    /**
+     * Cancel a scheduled publish job
+     * @param {string} jobId - Job ID to cancel
+     * @returns {Promise<boolean>}
+     */
+    async cancelScheduledPublishJob(jobId) {
+        try {
+            const job = await this.scheduledPublishQueue.getJob(jobId);
+            if (job) {
+                await job.remove();
+                console.log(`✅ Cancelled scheduled publish job: ${jobId}`);
+                return true;
+            }
+            console.log(`⚠️  Scheduled publish job not found: ${jobId}`);
+            return false;
+        } catch (error) {
+            console.error(`❌ Error cancelling scheduled publish job ${jobId}:`, error);
+            throw error;
+        }
+    }
+
+    /**
+     * Reschedule a publish job
+     * @param {string} oldJobId - Old job ID to remove
+     * @param {Object} newJobData - New job data
+     * @returns {Promise<Object>} New job
+     */
+    async reschedulePublishJob(oldJobId, newJobData) {
+        await this.cancelScheduledPublishJob(oldJobId);
+        return await this.addScheduledPublishJob(newJobData);
+    }
+
+    /**
      * Get job status by ID
-     * @param {string} queueName - Name of the queue ('article-generation', 'backlink-integration', 'backlink-revision')
+     * @param {string} queueName - Name of the queue ('article-generation', 'backlink-integration', 'scheduled-publish')
      * @param {string} jobId - Job ID
      * @returns {Promise<Object>} Job status object
      */
@@ -281,6 +363,8 @@ class QueueService {
                 return this.articleGenerationQueue;
             case 'backlink-integration':
                 return this.backlinkIntegrationQueue;
+            case 'scheduled-publish':
+                return this.scheduledPublishQueue;
             default:
                 throw new Error(`Unknown queue: ${queueName}`);
         }
@@ -372,6 +456,7 @@ class QueueService {
     async close() {
         await this.articleGenerationQueue.close();
         await this.backlinkIntegrationQueue.close();
+        await this.scheduledPublishQueue.close();
         console.log('All queues closed');
     }
 }

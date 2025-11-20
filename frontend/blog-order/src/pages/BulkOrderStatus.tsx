@@ -199,7 +199,7 @@ export default function BulkOrderStatus() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
             <div className="text-center p-4 bg-gray-50 rounded-lg">
               <div className="text-3xl font-bold text-gray-800">
                 {statistics.total || 0}
@@ -224,6 +224,14 @@ export default function BulkOrderStatus() {
               </div>
               <div className="text-sm text-gray-600 mt-1">Admin Review</div>
             </div>
+            {statistics.scheduled !== undefined && statistics.scheduled > 0 && (
+              <div className="text-center p-4 bg-purple-50 rounded-lg">
+                <div className="text-3xl font-bold text-purple-600">
+                  {statistics.scheduled}
+                </div>
+                <div className="text-sm text-gray-600 mt-1">Scheduled</div>
+              </div>
+            )}
             <div className="text-center p-4 bg-green-50 rounded-lg">
               <div className="text-3xl font-bold text-green-600">
                 {statistics.completed || 0}
@@ -285,6 +293,51 @@ export default function BulkOrderStatus() {
                     {order.status.replace(/_/g, " ")}
                   </div>
                 </div>
+
+                {/* Schedule Information */}
+                {order.scheduled_publish_at && (
+                  <div className="mt-2 mb-2">
+                    {order.scheduled_status === "SCHEDULED" && (
+                      <div className="flex items-center gap-2 p-2 bg-blue-50 border border-blue-200 rounded-lg text-sm">
+                        <span className="text-blue-600">⏰</span>
+                        <span className="text-blue-800">
+                          <strong>Scheduled:</strong>{" "}
+                          {new Date(
+                            order.scheduled_publish_at
+                          ).toLocaleString()}
+                        </span>
+                      </div>
+                    )}
+                    {order.scheduled_status === "PUBLISHED" && (
+                      <div className="flex items-center gap-2 p-2 bg-green-50 border border-green-200 rounded-lg text-sm">
+                        <span className="text-green-600">✅</span>
+                        <span className="text-green-800">
+                          Published on schedule
+                        </span>
+                      </div>
+                    )}
+                    {order.scheduled_status === "CANCELLED" && (
+                      <div className="flex items-center gap-2 p-2 bg-gray-50 border border-gray-200 rounded-lg text-sm">
+                        <span className="text-gray-600">⚠️</span>
+                        <span className="text-gray-800">
+                          Schedule cancelled (was scheduled for{" "}
+                          {new Date(
+                            order.scheduled_publish_at
+                          ).toLocaleString()}
+                          )
+                        </span>
+                      </div>
+                    )}
+                    {order.scheduled_status === "FAILED" && (
+                      <div className="flex items-center gap-2 p-2 bg-red-50 border border-red-200 rounded-lg text-sm">
+                        <span className="text-red-600">❌</span>
+                        <span className="text-red-800">
+                          Scheduled publish failed
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <div className="flex items-center justify-between text-xs text-gray-500">
                   <span>Order ID: {order.id.slice(0, 8)}...</span>

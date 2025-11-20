@@ -73,6 +73,8 @@ export interface Order {
     | "COMPLETED"
     | "FAILED"
     | "REFUNDED";
+  scheduled_publish_at?: string;
+  scheduled_status?: "SCHEDULED" | "CANCELLED" | "PUBLISHED" | "FAILED";
   created_at: string;
   completed_at?: string;
 }
@@ -188,4 +190,49 @@ export interface BackendOrderStatusResponse {
     canRequestRevision: boolean;
     canSubmitForReview: boolean;
   };
+}
+
+// Scheduling interfaces
+export interface SchedulePublicationRequest {
+  orderId: string;
+  versionId: string;
+  scheduledPublishAt: string; // ISO 8601 string in UTC
+  scheduledBy?: string;
+}
+
+export interface SchedulePublicationResponse {
+  success: boolean;
+  message: string;
+  versionId: string;
+  orderId: string;
+  scheduledPublishAt: string;
+  jobId: string;
+}
+
+export interface CancelScheduleRequest {
+  orderId: string;
+  versionId: string;
+}
+
+export interface CancelScheduleResponse {
+  success: boolean;
+  message: string;
+  versionId: string;
+  orderId: string;
+}
+
+export interface ReschedulePublicationRequest {
+  orderId: string;
+  versionId: string;
+  scheduledPublishAt: string; // ISO 8601 string in UTC
+  scheduledBy?: string;
+}
+
+export interface ReschedulePublicationResponse {
+  success: boolean;
+  message: string;
+  versionId: string;
+  orderId: string;
+  scheduledPublishAt: string;
+  jobId: string;
 }

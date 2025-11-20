@@ -1,6 +1,7 @@
 const QueueService = require('./QueueService');
 const processArticleGeneration = require('./processors/articleGenerationProcessor');
 const processBacklinkIntegration = require('./processors/backlinkIntegrationProcessor');
+const processScheduledPublish = require('./processors/scheduledPublishProcessor');
 
 /**
  * Queue Worker - Processes jobs from all queues
@@ -36,13 +37,23 @@ class QueueWorker {
             return await processBacklinkIntegration(job);
         });
 
+        this.queueService.scheduledPublishQueue.process('publish-version', 1, async (job) => {
+            console.log(`\n🎯 Picked up job from scheduled-publish queue: ${job.id}`);
+            return await processScheduledPublish(job);
+        });
+
         console.log('✅ Queue processors registered\n');
+
+        // Reconcile scheduled jobs after startup
+        await this._reconcileScheduledJobs();
+
         console.log('╔═══════════════════════════════════════════════════════════════');
         console.log('║ ✅ QUEUE WORKER RUNNING');
         console.log('╠═══════════════════════════════════════════════════════════════');
         console.log('║ Processing queues:');
         console.log('║   • article-generation');
         console.log('║   • backlink-integration');
+        console.log('║   • scheduled-publish');
         console.log('║');
         console.log('║ Waiting for jobs...');
         console.log('╚═══════════════════════════════════════════════════════════════\n');
@@ -52,6 +63,140 @@ class QueueWorker {
 
         // Log queue stats periodically
         this._startStatsLogger();
+    }
+
+    /**
+     * Reconcile scheduled jobs from database
+     * Re-creates missing jobs after Redis restart
+     * @private
+     */
+    async _reconcileScheduledJobs() {
+        console.log('\n╔═══════════════════════════════════════════════════════════════');
+        console.log('║ 🔄 RECONCILING SCHEDULED PUBLISH JOBS');
+        console.log('╚═══════════════════════════════════════════════════════════════\n');
+
+        try {
+            const prisma = require('../../db/prisma');
+            
+            // Find all scheduled versions
+            const scheduledVersions = await prisma.articleVersion.findMany({
+                where: {
+                    scheduled_status: 'SCHEDULED',
+                    scheduled_publish_at: {
+                        not: null
+                    }
+                },
+                include: {
+                    article: {
+                        include: {
+                            domain: true
+                        }
+                    },
+                    orders: {
+                        where: {
+                            version_id: { not: null }
+                        },
+                        take: 1
+                    }
+                }
+            });
+
+            console.log(`Found ${scheduledVersions.length} scheduled versions in database\n`);
+
+            let reconciledCount = 0;
+            let skippedCount = 0;
+
+            for (const version of scheduledVersions) {
+                const scheduledAt = new Date(version.scheduled_publish_at).getTime();
+                const now = Date.now();
+                const jobId = `scheduled-publish-v${version.id}`;
+                // Load primary order for this version (if any)
+                const order = version.orders && version.orders.length > 0 ? version.orders[0] : null;
+
+                // Check if job exists in queue
+                const existingJob = await this.queueService.scheduledPublishQueue.getJob(jobId);
+
+                if (existingJob) {
+                    let state = 'unknown';
+                    try {
+                        state = await existingJob.getState();
+                    } catch (err) {
+                        state = 'unavailable';
+                    }
+                    console.log(`✓ Job ${jobId} already exists in queue (state: ${state})`);
+
+                    // If the job is in a terminal state (completed/failed/stalled), we should remove and recreate it
+                    // to handle cases where the job was cancelled or completed without publishing
+                    if (['completed', 'failed', 'stalled'].includes(state)) {
+                        const delay = Math.max(0, scheduledAt - Date.now());
+                        console.log(`🔁 Job ${jobId} is in terminal state (${state}). Recreating (delay ${Math.round(delay/1000)}s)`);
+                        try {
+                            await existingJob.remove();
+                            await this.queueService.addScheduledPublishJob({
+                                versionId: version.id,
+                                orderId: order.id,
+                                articleId: version.article_id,
+                                domainName: version.article.domain?.slug || 'unknown',
+                                scheduledAt
+                            });
+                            // Update job id if missing
+                            if (!version.scheduled_job_id) {
+                                await prisma.articleVersion.update({ where: { id: version.id }, data: { scheduled_job_id: jobId } });
+                            }
+                            reconciledCount++;
+                            continue;
+                        } catch (recreateErr) {
+                            console.error(`Failed to recreate job ${jobId}:`, recreateErr);
+                            continue;
+                        }
+                    }
+
+                    skippedCount++;
+                    continue;
+                }
+
+                // Re-create missing job
+                console.log(`🔧 Re-creating missing job ${jobId} (scheduled: ${new Date(scheduledAt).toISOString()})`);
+
+                if (!order) {
+                    console.warn(`⚠️  No order found for version ${version.id}, skipping`);
+                    continue;
+                }
+
+                const jobData = {
+                    versionId: version.id,
+                    orderId: order.id,
+                    articleId: version.article_id,
+                    domainName: version.article.domain?.slug || 'unknown',
+                    scheduledAt
+                };
+
+                // Add job with computed delay (or immediate if overdue)
+                await this.queueService.addScheduledPublishJob(jobData);
+
+                // Update job ID if it was missing
+                if (!version.scheduled_job_id) {
+                    await prisma.articleVersion.update({
+                        where: { id: version.id },
+                        data: { scheduled_job_id: jobId }
+                    });
+                }
+
+                reconciledCount++;
+            }
+
+            console.log('\n╔═══════════════════════════════════════════════════════════════');
+            console.log('║ ✅ RECONCILIATION COMPLETE');
+            console.log('╠═══════════════════════════════════════════════════════════════');
+            console.log(`║ Re-created: ${reconciledCount}`);
+            console.log(`║ Already exists: ${skippedCount}`);
+            console.log(`║ Total: ${scheduledVersions.length}`);
+            console.log('╚═══════════════════════════════════════════════════════════════\n');
+
+        } catch (error) {
+            console.error('❌ Reconciliation failed:', error);
+            // Don't throw - allow worker to start even if reconciliation fails
+        }
     }
 
     /**
