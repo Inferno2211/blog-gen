@@ -24,6 +24,8 @@ interface BacklinkVersion {
   reviewed_by?: string;
   reviewed_at?: string;
   created_at: string;
+  scheduled_publish_at?: string;
+  scheduled_status?: "SCHEDULED" | "PUBLISHED" | "CANCELLED" | "FAILED";
   article: {
     id: string;
     slug: string;
@@ -37,6 +39,13 @@ interface BacklinkVersion {
       version_num: number;
     };
   };
+  orders?: Array<{
+    id: string;
+    customer_email: string;
+    status: string;
+    scheduled_publish_at?: string;
+    scheduled_status?: string;
+  }>;
 }
 
 const BacklinkReview: React.FC = () => {
@@ -96,6 +105,31 @@ const BacklinkReview: React.FC = () => {
   };
 
   const handleApproveAndPublish = async (versionId: string) => {
+    // Check if this version has a scheduled publish
+    const hasScheduledPublish = selectedVersion?.orders?.some(
+      (order) =>
+        order.scheduled_status === "SCHEDULED" && order.scheduled_publish_at
+    );
+
+    if (hasScheduledPublish) {
+      const scheduledTime = selectedVersion?.orders?.find(
+        (order) => order.scheduled_status === "SCHEDULED"
+      )?.scheduled_publish_at;
+
+      const confirmed = window.confirm(
+        `⚠️ WARNING: This article is scheduled for publication at ${new Date(
+          scheduledTime!
+        ).toLocaleString()}.\n\n` +
+          `Clicking "Approve & Publish" will CANCEL the scheduled publish and publish the article IMMEDIATELY instead.\n\n` +
+          `If you want to keep the scheduled publish time, click "Approve" (without Publish) instead.\n\n` +
+          `Do you want to publish NOW and cancel the scheduled publish?`
+      );
+
+      if (!confirmed) {
+        return;
+      }
+    }
+
     try {
       await approveAndPublish(versionId, reviewNotes);
       setReviewNotes("");
@@ -415,6 +449,39 @@ const BacklinkReview: React.FC = () => {
                   Domain: {selectedVersion.article.domain.name} | Version:{" "}
                   {selectedVersion.version_num}
                 </p>
+
+                {/* Scheduled Publish Warning */}
+                {selectedVersion.orders?.some(
+                  (order) =>
+                    order.scheduled_status === "SCHEDULED" &&
+                    order.scheduled_publish_at
+                ) && (
+                  <div className="bg-yellow-50 border border-yellow-300 p-4 rounded-lg mb-4">
+                    <div className="flex items-start gap-2">
+                      <span className="text-yellow-600 text-xl">⏰</span>
+                      <div className="flex-1">
+                        <h4 className="font-semibold text-yellow-900 mb-1">
+                          Scheduled Publication
+                        </h4>
+                        <p className="text-sm text-yellow-800">
+                          Customer has scheduled this article to publish at:{" "}
+                          <strong>
+                            {new Date(
+                              selectedVersion.orders.find(
+                                (o) => o.scheduled_status === "SCHEDULED"
+                              )?.scheduled_publish_at!
+                            ).toLocaleString()}
+                          </strong>
+                        </p>
+                        <p className="text-xs text-yellow-700 mt-2">
+                          💡 Click "Approve" to approve the article and keep the
+                          scheduled time. Only click "Approve & Publish" if you
+                          want to publish immediately and cancel the schedule.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 <div className="bg-blue-50 p-4 rounded-lg mb-4">
                   <h4 className="font-medium text-blue-900 mb-2">

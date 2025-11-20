@@ -67,6 +67,15 @@ async function getBacklinkReviewQueue(status = 'PENDING_REVIEW', sortBy = 'creat
                     domain: true,
                     selected_version: true
                 }
+            },
+            orders: {
+                select: {
+                    id: true,
+                    customer_email: true,
+                    status: true,
+                    scheduled_publish_at: true,
+                    scheduled_status: true
+                }
             }
         },
         orderBy: orderBy
@@ -74,6 +83,18 @@ async function getBacklinkReviewQueue(status = 'PENDING_REVIEW', sortBy = 'creat
 }
 
 async function approveBacklink(versionId, adminId, reviewNotes) {
+    // Check if version has scheduled publish
+    const existingVersion = await prisma.articleVersion.findUnique({
+        where: { id: versionId },
+        select: { scheduled_status: true, scheduled_publish_at: true }
+    });
+
+    const hasScheduledPublish = existingVersion?.scheduled_status === 'SCHEDULED';
+    
+    if (hasScheduledPublish) {
+        console.log(`✅ Approving version ${versionId} - will publish at scheduled time: ${existingVersion.scheduled_publish_at}`);
+    }
+
     const version = await prisma.articleVersion.update({
         where: { id: versionId },
         data: {
@@ -81,6 +102,7 @@ async function approveBacklink(versionId, adminId, reviewNotes) {
             review_notes: reviewNotes,
             reviewed_by: adminId,
             reviewed_at: new Date()
+            // NOTE: We do NOT touch scheduled_status - it remains SCHEDULED if set
         },
         include: {
             article: {
@@ -191,6 +213,26 @@ async function rejectBacklink(versionId, adminId, reviewNotes) {
 }
 
 async function approveAndPublish(versionId, adminId, reviewNotes) {
+    // First check if there's a scheduled publish and cancel it
+    const versionCheck = await prisma.articleVersion.findUnique({
+        where: { id: versionId },
+        select: { scheduled_status: true, scheduled_job_id: true }
+    });
+
+    if (versionCheck?.scheduled_status === 'SCHEDULED' && versionCheck.scheduled_job_id) {
+        console.log(`⚠️  Cancelling scheduled publish for version ${versionId} - admin chose immediate publish`);
+        
+        // Cancel the scheduled job
+        try {
+            const QueueService = require('../queue/QueueService');
+            const queueService = new QueueService();
+            await queueService.cancelScheduledPublishJob(versionCheck.scheduled_job_id);
+        } catch (error) {
+            console.error('Failed to cancel scheduled job:', error);
+            // Continue anyway - admin wants immediate publish
+        }
+    }
+
     // First approve the backlink and get associated orders
     const approvedVersion = await prisma.articleVersion.update({
         where: { id: versionId },
@@ -198,7 +240,11 @@ async function approveAndPublish(versionId, adminId, reviewNotes) {
             backlink_review_status: 'APPROVED',
             review_notes: reviewNotes,
             reviewed_by: adminId,
-            reviewed_at: new Date()
+            reviewed_at: new Date(),
+            // Cancel schedule since we're publishing now
+            scheduled_status: versionCheck?.scheduled_status === 'SCHEDULED' ? 'CANCELLED' : undefined,
+            scheduled_publish_at: versionCheck?.scheduled_status === 'SCHEDULED' ? null : undefined,
+            scheduled_job_id: versionCheck?.scheduled_status === 'SCHEDULED' ? null : undefined
         },
         include: {
             orders: true,

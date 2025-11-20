@@ -898,7 +898,7 @@ export default function OrderStatus() {
         )}
 
         {/* Completed Notice */}
-        {order.status === "COMPLETED" && (
+        {order.status === "COMPLETED" && !order.scheduled_publish_at && (
           <div className="bg-green-50 border border-green-200 rounded-lg p-6 mb-6">
             <h3 className="text-lg font-semibold text-green-800 mb-2">
               🎉 Order Completed!
@@ -914,6 +914,35 @@ export default function OrderStatus() {
             )}
           </div>
         )}
+
+        {/* Approved but Scheduled Notice */}
+        {order.status === "COMPLETED" &&
+          order.scheduled_publish_at &&
+          order.scheduled_status === "SCHEDULED" && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-6">
+              <h3 className="text-lg font-semibold text-blue-800 mb-2">
+                ✅ Approved - Scheduled for Publication
+              </h3>
+              <p className="text-blue-700 mb-4">
+                Great news! Your article has been reviewed and approved by our
+                admin team. It will be automatically published at your scheduled
+                time.
+              </p>
+              <div className="bg-white border border-blue-200 rounded-lg p-4 mb-3">
+                <p className="text-blue-800 font-semibold mb-2">
+                  📅 Scheduled Publish Time:{" "}
+                  {new Date(order.scheduled_publish_at).toLocaleString()}
+                </p>
+                <CountdownTimer targetDate={order.scheduled_publish_at} />
+              </div>
+              <p className="text-sm text-blue-600">
+                Approved on:{" "}
+                {order.completed_at
+                  ? new Date(order.completed_at).toLocaleString()
+                  : "Just now"}
+              </p>
+            </div>
+          )}
 
         {/* Failed Notice */}
         {order.status === "FAILED" && (

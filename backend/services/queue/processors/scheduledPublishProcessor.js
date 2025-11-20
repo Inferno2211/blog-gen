@@ -179,6 +179,15 @@ async function processScheduledPublish(job) {
 
         job.progress(20);
 
+        // Set selected version BEFORE publishing (required by addBlogToDomain)
+        console.log(`🔗 Setting selected version...`);
+        await prisma.article.update({
+            where: { id: articleId },
+            data: { selected_version_id: versionId }
+        });
+
+        job.progress(30);
+
         // Publish the article version to domain
         console.log(`📝 Publishing version ${versionId} to domain ${domainName}...`);
         const publishResult = await coreServices.addBlogToDomain(articleId, domainName);
@@ -192,11 +201,10 @@ async function processScheduledPublish(job) {
         // Update database in transaction
         console.log(`💾 Updating database records...`);
         await prisma.$transaction(async (tx) => {
-            // Update article
+            // Update article status (selected_version_id already set above)
             await tx.article.update({
                 where: { id: articleId },
                 data: {
-                    selected_version_id: versionId,
                     status: 'PUBLISHED',
                     availability_status: 'AVAILABLE'
                 }
