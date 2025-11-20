@@ -134,6 +134,8 @@ export default function OrderStatus() {
           status: response.data.status as any,
           created_at: response.data.orderDetails.createdAt,
           completed_at: response.data.orderDetails.completedAt,
+          scheduled_publish_at: response.data.orderDetails.scheduledPublishAt,
+          scheduled_status: response.data.orderDetails.scheduledStatus as any,
           session_id: "", // Not needed in UI
           payment_data: {} as any, // Not needed in UI
         },
@@ -957,38 +959,109 @@ export default function OrderStatus() {
           </div>
         )}
 
-        {/* Backlink Details */}
+        {/* Backlink Details / Order Details */}
         <div className="bg-white rounded-lg shadow-md p-6">
-          <h2 className="text-xl font-semibold text-gray-800 mb-4">
-            Backlink Details
-          </h2>
-          <div className="space-y-2">
-            <div>
-              <span className="font-medium text-gray-700">Target URL:</span>
-              <a
-                href={order.backlink_data.target_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="ml-2 text-blue-600 hover:underline break-all"
-              >
-                {order.backlink_data.target_url}
-              </a>
-            </div>
-            <div>
-              <span className="font-medium text-gray-700">Anchor Text:</span>
-              <span className="ml-2 text-gray-600">
-                {order.backlink_data.keyword}
-              </span>
-            </div>
-            {order.backlink_data.notes && (
-              <div>
-                <span className="font-medium text-gray-700">Notes:</span>
-                <p className="mt-1 text-gray-600">
-                  {order.backlink_data.notes}
-                </p>
-              </div>
-            )}
-          </div>
+          {(() => {
+            const bd = order?.backlink_data as any;
+            const isArticleOrder =
+              bd?.type?.toUpperCase() === "ARTICLE_GENERATION";
+
+            return (
+              <>
+                <h2 className="text-xl font-semibold text-gray-800 mb-4">
+                  {isArticleOrder ? "Article Details" : "Backlink Details"}
+                </h2>
+                <div className="space-y-2">
+                  {isArticleOrder ? (
+                    <>
+                      {/* Article Generation Order */}
+                      <div>
+                        <span className="font-medium text-gray-700">
+                          Order Type:
+                        </span>
+                        <span className="ml-2 text-gray-600">
+                          Article Generation
+                        </span>
+                      </div>
+                      {bd.articleTitle && (
+                        <div>
+                          <span className="font-medium text-gray-700">
+                            Article Title:
+                          </span>
+                          <span className="ml-2 text-gray-600">
+                            {bd.articleTitle}
+                          </span>
+                        </div>
+                      )}
+                      {bd.topic && (
+                        <div>
+                          <span className="font-medium text-gray-700">
+                            Topic:
+                          </span>
+                          <span className="ml-2 text-gray-600">{bd.topic}</span>
+                        </div>
+                      )}
+                      {bd.niche && (
+                        <div>
+                          <span className="font-medium text-gray-700">
+                            Niche:
+                          </span>
+                          <span className="ml-2 text-gray-600">{bd.niche}</span>
+                        </div>
+                      )}
+                      {bd.notes && (
+                        <div>
+                          <span className="font-medium text-gray-700">
+                            Notes:
+                          </span>
+                          <p className="mt-1 text-gray-600">{bd.notes}</p>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      {/* Backlink Purchase Order */}
+                      {order.backlink_data.target_url && (
+                        <div>
+                          <span className="font-medium text-gray-700">
+                            Target URL:
+                          </span>
+                          <a
+                            href={order.backlink_data.target_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="ml-2 text-blue-600 hover:underline break-all"
+                          >
+                            {order.backlink_data.target_url}
+                          </a>
+                        </div>
+                      )}
+                      {order.backlink_data.keyword && (
+                        <div>
+                          <span className="font-medium text-gray-700">
+                            Anchor Text:
+                          </span>
+                          <span className="ml-2 text-gray-600">
+                            {order.backlink_data.keyword}
+                          </span>
+                        </div>
+                      )}
+                      {order.backlink_data.notes && (
+                        <div>
+                          <span className="font-medium text-gray-700">
+                            Notes:
+                          </span>
+                          <p className="mt-1 text-gray-600">
+                            {order.backlink_data.notes}
+                          </p>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </>
+            );
+          })()}
         </div>
       </div>
     </div>

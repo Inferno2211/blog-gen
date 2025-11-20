@@ -166,10 +166,13 @@ export interface BackendOrderStatusResponse {
         keyword: string;
         target_url: string;
         notes?: string;
+        type?: string; // For article generation vs backlink purchase
       };
       createdAt: string;
       completedAt?: string;
       customerEmail: string;
+      scheduledPublishAt?: string; // ISO 8601 string in UTC
+      scheduledStatus?: string; // SCHEDULED, CANCELLED, EXECUTED
     };
     version?: {
       versionId: string;
