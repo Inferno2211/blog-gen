@@ -966,12 +966,16 @@ export default function OrderStatus() {
             const isArticleOrder =
               bd?.type?.toUpperCase() === "ARTICLE_GENERATION";
 
+            // Helper to check if value exists (not null, undefined, or empty string)
+            const hasValue = (val: any) =>
+              val !== null && val !== undefined && val !== "";
+
             return (
               <>
                 <h2 className="text-xl font-semibold text-gray-800 mb-4">
-                  {isArticleOrder ? "Article Details" : "Backlink Details"}
+                  {isArticleOrder ? "Order Details" : "Backlink Details"}
                 </h2>
-                <div className="space-y-2">
+                <div className="space-y-3">
                   {isArticleOrder ? (
                     <>
                       {/* Article Generation Order */}
@@ -983,36 +987,101 @@ export default function OrderStatus() {
                           Article Generation
                         </span>
                       </div>
-                      {bd.articleTitle && (
-                        <div>
-                          <span className="font-medium text-gray-700">
-                            Article Title:
-                          </span>
-                          <span className="ml-2 text-gray-600">
-                            {bd.articleTitle}
-                          </span>
+
+                      {/* Article Details Section */}
+                      {(hasValue(bd.articleTitle) ||
+                        hasValue(bd.topic) ||
+                        hasValue(bd.niche) ||
+                        hasValue(bd.keyword)) && (
+                        <div className="pt-2 border-t border-gray-200">
+                          <h3 className="text-sm font-semibold text-gray-700 mb-2">
+                            📝 Article Details
+                          </h3>
+                          <div className="space-y-2 ml-4">
+                            {hasValue(bd.articleTitle) && (
+                              <div>
+                                <span className="font-medium text-gray-700">
+                                  Title:
+                                </span>
+                                <span className="ml-2 text-gray-600">
+                                  {bd.articleTitle}
+                                </span>
+                              </div>
+                            )}
+                            {hasValue(bd.topic) && (
+                              <div>
+                                <span className="font-medium text-gray-700">
+                                  Topic:
+                                </span>
+                                <span className="ml-2 text-gray-600">
+                                  {bd.topic}
+                                </span>
+                              </div>
+                            )}
+                            {hasValue(bd.niche) && (
+                              <div>
+                                <span className="font-medium text-gray-700">
+                                  Niche:
+                                </span>
+                                <span className="ml-2 text-gray-600">
+                                  {bd.niche}
+                                </span>
+                              </div>
+                            )}
+                            {hasValue(bd.keyword) && (
+                              <div>
+                                <span className="font-medium text-gray-700">
+                                  Focus Keyword:
+                                </span>
+                                <span className="ml-2 text-gray-600">
+                                  {bd.keyword}
+                                </span>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       )}
-                      {bd.topic && (
-                        <div>
-                          <span className="font-medium text-gray-700">
-                            Topic:
-                          </span>
-                          <span className="ml-2 text-gray-600">{bd.topic}</span>
+
+                      {/* Optional Backlink Section for Article Generation */}
+                      {(hasValue(bd.targetUrl) || hasValue(bd.anchorText)) && (
+                        <div className="pt-2 border-t border-gray-200">
+                          <h3 className="text-sm font-semibold text-gray-700 mb-2">
+                            🔗 Included Backlink
+                          </h3>
+                          <div className="space-y-2 ml-4">
+                            {hasValue(bd.targetUrl) && (
+                              <div>
+                                <span className="font-medium text-gray-700">
+                                  Target URL:
+                                </span>
+                                <a
+                                  href={bd.targetUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="ml-2 text-blue-600 hover:underline break-all"
+                                >
+                                  {bd.targetUrl}
+                                </a>
+                              </div>
+                            )}
+                            {hasValue(bd.anchorText) && (
+                              <div>
+                                <span className="font-medium text-gray-700">
+                                  Anchor Text:
+                                </span>
+                                <span className="ml-2 text-gray-600">
+                                  {bd.anchorText}
+                                </span>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       )}
-                      {bd.niche && (
-                        <div>
+
+                      {hasValue(bd.notes) && (
+                        <div className="pt-2 border-t border-gray-200">
                           <span className="font-medium text-gray-700">
-                            Niche:
-                          </span>
-                          <span className="ml-2 text-gray-600">{bd.niche}</span>
-                        </div>
-                      )}
-                      {bd.notes && (
-                        <div>
-                          <span className="font-medium text-gray-700">
-                            Notes:
+                            Additional Notes:
                           </span>
                           <p className="mt-1 text-gray-600">{bd.notes}</p>
                         </div>
@@ -1021,7 +1090,7 @@ export default function OrderStatus() {
                   ) : (
                     <>
                       {/* Backlink Purchase Order */}
-                      {order.backlink_data.target_url && (
+                      {hasValue(order.backlink_data.target_url) && (
                         <div>
                           <span className="font-medium text-gray-700">
                             Target URL:
@@ -1036,7 +1105,7 @@ export default function OrderStatus() {
                           </a>
                         </div>
                       )}
-                      {order.backlink_data.keyword && (
+                      {hasValue(order.backlink_data.keyword) && (
                         <div>
                           <span className="font-medium text-gray-700">
                             Anchor Text:
@@ -1046,7 +1115,7 @@ export default function OrderStatus() {
                           </span>
                         </div>
                       )}
-                      {order.backlink_data.notes && (
+                      {hasValue(order.backlink_data.notes) && (
                         <div>
                           <span className="font-medium text-gray-700">
                             Notes:
