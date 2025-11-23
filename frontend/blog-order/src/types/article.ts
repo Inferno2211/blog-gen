@@ -26,7 +26,7 @@ export interface Article {
   status: string;
   created_at: string;
   updated_at: string;
-  baclink_expiry: string | null;
+  backlink_expiry: string | null;
   user: string | null;
   topic: string | null;
   niche: string | null;
@@ -57,4 +57,4 @@ export interface PublishBlogResponse {
   message: string;
   articleId: string;
   file: string;
-} 
+}

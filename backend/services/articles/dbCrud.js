@@ -274,13 +274,32 @@ async function approveAndPublish(versionId, adminId, reviewNotes) {
         const publishResult = await addBlogToDomain(approvedVersion.article_id, article.domain.slug);
         
         if (publishResult.success) {
-            // Update article status to published and make available for new purchases
+            // Determine expiration settings based on order type
+            let updateData = {
+                status: 'PUBLISHED',
+                availability_status: 'AVAILABLE'
+            };
+
+            // Check if this is a backlink purchase (Scenario 1 & 2)
+            const backlinkOrder = approvedVersion.orders.find(o => o.session_type === 'PURCHASE');
+            
+            if (backlinkOrder) {
+                const expiryDate = new Date();
+                expiryDate.setDate(expiryDate.getDate() + 30); // 30 days expiration
+
+                updateData = {
+                    ...updateData,
+                    availability_status: 'SOLD_OUT', // Exclusive
+                    backlink_expiry_date: expiryDate,
+                    original_version_id: approvedVersion.article.selected_version_id, // Previous version (captured before update)
+                    active_order_id: backlinkOrder.id
+                };
+            }
+
+            // Update article status
             await prisma.article.update({
                 where: { id: approvedVersion.article_id },
-                data: { 
-                    status: 'PUBLISHED',
-                    availability_status: 'AVAILABLE'
-                }
+                data: updateData
             });
             
             // Complete orders and send customer notifications

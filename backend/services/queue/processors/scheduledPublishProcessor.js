@@ -7,7 +7,7 @@ const EmailService = require('../../EmailService');
  * Publishes an ArticleVersion at its scheduled time unless admin explicitly rejected it
  */
 async function processScheduledPublish(job) {
-    const { versionId, orderId, articleId, domainName, scheduledAt, retryCount = 0 } = job.data;
+    const { versionId, orderId, articleId, domainName: jobDomainName, scheduledAt, retryCount = 0 } = job.data;
 
     console.log('╔═══════════════════════════════════════════════════════════════');
     console.log('║ 📅 SCHEDULED PUBLISH JOB STARTED');
@@ -16,7 +16,7 @@ async function processScheduledPublish(job) {
     console.log(`║ Version ID: ${versionId}`);
     console.log(`║ Order ID: ${orderId}`);
     console.log(`║ Article ID: ${articleId}`);
-    console.log(`║ Domain: ${domainName}`);
+    console.log(`║ Domain: ${jobDomainName || 'Pending Resolution'}`);
     console.log(`║ Scheduled At: ${new Date(scheduledAt).toISOString()}`);
     console.log(`║ Retry Count: ${retryCount}`);
     console.log('╚═══════════════════════════════════════════════════════════════\n');
@@ -39,6 +39,12 @@ async function processScheduledPublish(job) {
             throw new Error(`ArticleVersion ${versionId} not found`);
         }
 
+        // Resolve domain name
+        const domainName = jobDomainName || version.article.domain?.slug;
+        if (!domainName) {
+            throw new Error('Could not resolve domain name for article');
+        }
+
         // Validate scheduled status
         if (version.scheduled_status !== 'SCHEDULED') {
             console.log(`⚠️  Version ${versionId} is not in SCHEDULED status (current: ${version.scheduled_status})`);
@@ -49,54 +55,7 @@ async function processScheduledPublish(job) {
             };
         }
 
-        // Check if still pending admin review
-        const isPendingReview = version.backlink_review_status === 'PENDING_REVIEW';
         const order = version.orders.find(o => o.id === orderId);
-
-        if (isPendingReview) {
-            const MAX_RETRIES = 12; // Max 1 hour of waiting (12 * 5 minutes)
-            
-            if (retryCount >= MAX_RETRIES) {
-                console.log(`⚠️  Version ${versionId} still pending review after ${retryCount} retries. Auto-approving for scheduled publish.`);
-                
-                // Auto-approve after max retries - admin didn't review in time
-                await prisma.articleVersion.update({
-                    where: { id: versionId },
-                    data: {
-                        backlink_review_status: 'APPROVED',
-                        review_notes: 'Auto-approved: Scheduled deadline reached, admin did not review within 1 hour'
-                    }
-                });
-
-                console.log(`✅ Auto-approved version ${versionId}. Proceeding with publish...`);
-                
-                // Continue execution - don't return here, let it fall through to publish logic below
-            } else {
-                console.log(`⏳ Version ${versionId} is still pending admin review. Rescheduling check in 5 minutes... (retry ${retryCount + 1}/${MAX_RETRIES})`);
-                
-                // Reschedule this job to run again in 5 minutes
-                const QueueService = require('../QueueService');
-                const queueService = new QueueService();
-                
-                const newScheduledAt = Date.now() + (5 * 60 * 1000); // 5 minutes from now
-                
-                await queueService.addScheduledPublishJob({
-                    versionId,
-                    orderId,
-                    articleId,
-                    domainName,
-                    scheduledAt: newScheduledAt,
-                    retryCount: retryCount + 1
-                });
-
-                return {
-                    success: false,
-                    reason: 'Pending admin review - rescheduled',
-                    rescheduledTo: new Date(newScheduledAt).toISOString(),
-                    retryCount: retryCount + 1
-                };
-            }
-        }
 
         // Check for explicit admin rejection
         const isRejected = version.backlink_review_status === 'REJECTED';
@@ -201,13 +160,32 @@ async function processScheduledPublish(job) {
         // Update database in transaction
         console.log(`💾 Updating database records...`);
         await prisma.$transaction(async (tx) => {
+            // Determine expiration settings based on order type
+            let updateData = {
+                status: 'PUBLISHED',
+                availability_status: 'AVAILABLE'
+            };
+
+            // Check if this is a backlink purchase (Scenario 1 & 2)
+            const backlinkOrder = order && order.session_type === 'PURCHASE' ? order : null;
+            
+            if (backlinkOrder) {
+                const expiryDate = new Date();
+                expiryDate.setDate(expiryDate.getDate() + 30); // 30 days expiration
+
+                updateData = {
+                    ...updateData,
+                    availability_status: 'SOLD_OUT', // Exclusive
+                    backlink_expiry_date: expiryDate,
+                    original_version_id: version.article.selected_version_id, // Previous version (captured before update)
+                    active_order_id: backlinkOrder.id
+                };
+            }
+
             // Update article status (selected_version_id already set above)
             await tx.article.update({
                 where: { id: articleId },
-                data: {
-                    status: 'PUBLISHED',
-                    availability_status: 'AVAILABLE'
-                }
+                data: updateData
             });
 
             // Update version

@@ -2,6 +2,7 @@ const QueueService = require('./QueueService');
 const processArticleGeneration = require('./processors/articleGenerationProcessor');
 const processBacklinkIntegration = require('./processors/backlinkIntegrationProcessor');
 const processScheduledPublish = require('./processors/scheduledPublishProcessor');
+const processExpirationCheck = require('./processors/expirationProcessor');
 
 /**
  * Queue Worker - Processes jobs from all queues
@@ -42,10 +43,18 @@ class QueueWorker {
             return await processScheduledPublish(job);
         });
 
+        this.queueService.expirationCheckQueue.process('check-expiration', 1, async (job) => {
+            console.log(`\n🎯 Picked up job from expiration-check queue: ${job.id}`);
+            return await processExpirationCheck(job);
+        });
+
         console.log('✅ Queue processors registered\n');
 
         // Reconcile scheduled jobs after startup
         await this._reconcileScheduledJobs();
+
+        // Schedule expiration check
+        await this.queueService.scheduleExpirationCheck();
 
         console.log('╔═══════════════════════════════════════════════════════════════');
         console.log('║ ✅ QUEUE WORKER RUNNING');
@@ -54,6 +63,7 @@ class QueueWorker {
         console.log('║   • article-generation');
         console.log('║   • backlink-integration');
         console.log('║   • scheduled-publish');
+        console.log('║   • expiration-check');
         console.log('║');
         console.log('║ Waiting for jobs...');
         console.log('╚═══════════════════════════════════════════════════════════════\n');
