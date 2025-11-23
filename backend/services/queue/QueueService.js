@@ -82,6 +82,19 @@ class QueueService {
             }
         });
 
+        this.expirationCheckQueue = new Queue('expiration-check', {
+            redis: redisConfig,
+            defaultJobOptions: {
+                attempts: 3,
+                backoff: {
+                    type: 'exponential',
+                    delay: 2000
+                },
+                removeOnComplete: 100,
+                removeOnFail: 500
+            }
+        });
+
         this._setupEventHandlers();
     }
 
@@ -92,7 +105,8 @@ class QueueService {
         const queues = [
             this.articleGenerationQueue,
             this.backlinkIntegrationQueue,
-            this.scheduledPublishQueue
+            this.scheduledPublishQueue,
+            this.expirationCheckQueue
         ];
 
         queues.forEach(queue => {
@@ -409,6 +423,25 @@ class QueueService {
     }
 
     /**
+     * Schedule daily expiration check
+     */
+    async scheduleExpirationCheck() {
+        // Remove existing repeatable jobs to avoid duplicates
+        const jobs = await this.expirationCheckQueue.getRepeatableJobs();
+        for (const job of jobs) {
+            await this.expirationCheckQueue.removeRepeatableByKey(job.key);
+        }
+
+        // Add new daily job (runs every day at midnight)
+        await this.expirationCheckQueue.add('check-expiration', {}, {
+            repeat: { cron: '0 0 * * *' },
+            jobId: 'daily-expiration-check'
+        });
+        
+        console.log('✅ Scheduled daily expiration check');
+    }
+
+    /**
      * Check Redis connection health
      * @returns {Promise<Object>} Health status object
      */
@@ -457,6 +490,7 @@ class QueueService {
         await this.articleGenerationQueue.close();
         await this.backlinkIntegrationQueue.close();
         await this.scheduledPublishQueue.close();
+        await this.expirationCheckQueue.close();
         console.log('All queues closed');
     }
 }

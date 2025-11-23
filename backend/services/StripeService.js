@@ -147,6 +147,11 @@ class StripeService {
         throw new AppError('Payment not completed', 400, 'PAYMENT_NOT_COMPLETED');
       }
 
+      // Handle Renewal
+      if (session.metadata.type === 'renewal') {
+          return await this._handleRenewalSuccess(session);
+      }
+
       const purchaseSessionId = session.metadata.purchase_session_id;
       
       // Check if order already exists (idempotency check)
@@ -876,6 +881,105 @@ class StripeService {
       console.error('Error creating generation checkout session:', error);
       throw new AppError('Failed to create generation checkout session', 500, 'GENERATION_CHECKOUT_ERROR');
     }
+  }
+
+  /**
+   * Create a Stripe checkout session for backlink renewal
+   * @param {Object} order - The order to renew
+   * @returns {Promise<Object>} Stripe checkout session
+   */
+  async createRenewalCheckoutSession(order) {
+    try {
+      const checkoutSession = await this.stripe.checkout.sessions.create({
+        payment_method_types: ['card'],
+        line_items: [
+          {
+            price_data: {
+              currency: this.CURRENCY,
+              product_data: {
+                name: 'Backlink Renewal',
+                description: `Renew backlink for article ${order.article_id}`,
+                metadata: {
+                  type: 'renewal',
+                  order_id: order.id,
+                  article_id: order.article_id
+                }
+              },
+              unit_amount: this.BACKLINK_PRICE,
+            },
+            quantity: 1,
+          },
+        ],
+        mode: 'payment',
+        success_url: `${process.env.FRONTEND_URL}/renewal-success?stripe_session_id={CHECKOUT_SESSION_ID}&order_id=${order.id}`,
+        cancel_url: `${process.env.FRONTEND_URL}/renewal-cancel`,
+        customer_email: order.customer_email,
+        metadata: {
+          type: 'renewal',
+          order_id: order.id,
+          article_id: order.article_id
+        },
+        expires_at: Math.floor(Date.now() / 1000) + (30 * 60), // 30 minutes
+      });
+
+      return {
+        sessionId: checkoutSession.id,
+        url: checkoutSession.url
+      };
+    } catch (error) {
+      console.error('Stripe checkout creation failed:', error);
+      throw new AppError('Failed to create payment session', 500);
+    }
+  }
+
+  /**
+   * Handle successful renewal payment
+   * @param {Object} session - Stripe session object
+   * @returns {Promise<Object>} Renewal result
+   * @private
+   */
+  async _handleRenewalSuccess(session) {
+    const orderId = session.metadata.order_id;
+    const articleId = session.metadata.article_id;
+
+    console.log(`Processing renewal for order ${orderId}`);
+
+    // Update article expiration
+    const article = await this.prisma.article.findUnique({ where: { id: articleId } });
+    
+    if (!article) {
+        throw new AppError('Article not found for renewal', 404);
+    }
+
+    // Calculate new expiry date (add 30 days to current expiry or now if expired)
+    let newExpiry = new Date(article.backlink_expiry_date || Date.now());
+    if (newExpiry < new Date()) {
+        newExpiry = new Date(); // If already expired, start from now
+    }
+    newExpiry.setDate(newExpiry.getDate() + 30);
+
+    await this.prisma.article.update({
+        where: { id: articleId },
+        data: {
+            backlink_expiry_date: newExpiry,
+            availability_status: 'SOLD_OUT' // Ensure it stays sold out
+        }
+    });
+
+    // Send confirmation email
+    const EmailService = require('./EmailService');
+    const emailService = new EmailService();
+    await emailService.sendRenewalConfirmation(session.customer_email, {
+        articleTitle: article.topic || article.slug,
+        newExpiryDate: newExpiry
+    });
+
+    return {
+        success: true,
+        type: 'renewal',
+        orderId,
+        newExpiry
+    };
   }
 }
 

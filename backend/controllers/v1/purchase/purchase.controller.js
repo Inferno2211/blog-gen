@@ -1366,6 +1366,148 @@ class PurchaseController {
             next(error);
         }
     }
+
+
+    /**
+     * POST /api/v1/purchase/schedule
+     * Schedule a version for publishing
+     */
+    async scheduleVersion(req, res, next) {
+        try {
+            const { orderId, versionId, scheduledPublishAt, scheduledBy } = req.body;
+
+            if (!orderId || !versionId || !scheduledPublishAt) {
+                throw new ValidationError('Order ID, version ID, and scheduled publish time are required');
+            }
+
+            const result = await this.purchaseService.scheduleVersion(
+                orderId,
+                versionId,
+                scheduledPublishAt,
+                scheduledBy
+            );
+
+            res.status(200).json({
+                success: true,
+                message: result.message,
+                data: result
+            });
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    /**
+     * DELETE /api/v1/purchase/schedule/:orderId
+     * Cancel scheduled publish
+     */
+    async cancelSchedule(req, res, next) {
+        try {
+            const { orderId } = req.params;
+            const { versionId } = req.body;
+
+            let vId = versionId;
+            if (!vId) {
+                 const order = await prisma.order.findUnique({ where: { id: orderId } });
+                 if (!order) throw new NotFoundError('Order not found');
+                 vId = order.version_id;
+            }
+
+            const result = await this.purchaseService.cancelScheduledVersion(orderId, vId);
+
+            res.status(200).json({
+                success: true,
+                message: result.message
+            });
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    /**
+     * PUT /api/v1/purchase/schedule/:orderId
+     * Reschedule a version
+     */
+    async rescheduleVersion(req, res, next) {
+        try {
+            const { orderId } = req.params;
+            const { versionId, scheduledPublishAt, scheduledBy } = req.body;
+
+            if (!scheduledPublishAt) {
+                throw new ValidationError('New scheduled publish time is required');
+            }
+            
+            let vId = versionId;
+            if (!vId) {
+                 const order = await prisma.order.findUnique({ where: { id: orderId } });
+                 if (!order) throw new NotFoundError('Order not found');
+                 vId = order.version_id;
+            }
+
+            const result = await this.purchaseService.rescheduleVersion(
+                orderId,
+                vId,
+                scheduledPublishAt,
+                scheduledBy
+            );
+
+            res.status(200).json({
+                success: true,
+                message: result.message,
+                data: result
+            });
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    /**
+     * POST /api/v1/purchase/renew/:orderId
+     * Initiate backlink renewal
+     */
+    async renewBacklink(req, res, next) {
+        try {
+            const { orderId } = req.params;
+            
+            const order = await prisma.order.findUnique({
+                where: { id: orderId },
+                include: { article: true }
+            });
+
+            if (!order) {
+                throw new NotFoundError('Order not found');
+            }
+
+            // Check if eligible for renewal (must be a backlink order)
+            // Note: We check if it HAS an expiry date or is active
+            if (!order.article.backlink_expiry_date && order.article.active_order_id !== order.id) {
+                 // Allow renewal if it was the last active order even if expired/reverted?
+                 // For now, strict check: must be the active order or recently expired
+                 // But if reverted, active_order_id is null.
+                 // So we check if this order was the one associated with the article.
+                 // Actually, if reverted, the user has to buy again as new.
+                 // So we only allow renewal if active_order_id matches OR if it's within grace period (handled by processor not reverting yet)
+                 
+                 if (order.article.active_order_id !== order.id) {
+                     throw new ConflictError('This backlink is no longer active and cannot be renewed. Please purchase a new backlink.');
+                 }
+            }
+
+            const session = await this.stripeService.createRenewalCheckoutSession(order);
+
+            res.json({
+                success: true,
+                url: session.url
+            });
+
+        } catch (error) {
+            console.error('Renewal initiation failed:', error);
+            res.status(error.status || 500).json({
+                success: false,
+                message: error.message || 'Failed to initiate renewal'
+            });
+        }
+    }
 }
 
 // Export controller methods directly
@@ -1473,5 +1615,10 @@ module.exports = {
     async rescheduleVersion(req, res, next) {
         const controller = new PurchaseController();
         return controller.rescheduleVersion(req, res, next);
+    },
+
+    async renewBacklink(req, res, next) {
+        const controller = new PurchaseController();
+        return controller.renewBacklink(req, res, next);
     }
 };

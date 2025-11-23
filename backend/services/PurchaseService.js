@@ -795,7 +795,7 @@ class PurchaseService {
                 throw new Error('Order not found');
             }
 
-            if (order.status !== 'PAID' && order.status !== 'PROCESSING' && order.status !== 'ADMIN_REVIEW') {
+            if (order.status !== 'PAID' && order.status !== 'PROCESSING' && order.status !== 'QUALITY_CHECK' && order.status !== 'ADMIN_REVIEW' && order.status !== 'COMPLETED') {
                 throw new Error('Order is not in valid state for backlink configuration');
             }
 
