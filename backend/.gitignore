@@ -4,3 +4,5 @@ test-frontmatter.js
 .cursor
 script.js
 node_modules
+
+old/*
