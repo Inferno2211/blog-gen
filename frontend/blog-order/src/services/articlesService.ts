@@ -5,7 +5,7 @@ const API_HOST =
   import.meta.env.VITE_REACT_APP_API_URL?.replace(/\/$/, "") ||
   (typeof window !== "undefined" ? window.location.origin : "");
 const API_VERSION = import.meta.env.VITE_REACT_APP_API_VERSION || "1";
-const API_BASE = `${API_HOST}/v${API_VERSION}/articles`;
+const API_BASE = `${API_HOST}/api/v${API_VERSION}/articles`;
 
 // Helper function to get headers with auth token
 const getHeaders = () => {
@@ -114,7 +114,7 @@ export async function getBacklinkReviewQueue(
     sortBy,
     sortOrder
   });
-  
+
   const res = await fetch(`${API_BASE}/backlinkReviewQueue?${params}`, {
     headers: getHeaders()
   });

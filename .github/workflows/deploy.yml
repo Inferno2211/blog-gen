@@ -52,3 +52,18 @@ jobs:
             cd ../frontend/blog-order
             npm install
             npm run build
+
+            # Copy build to Nginx root
+            if [ "$DEPLOY_BRANCH" == "test" ]; then
+              NGINX_ROOT="/var/www/orbitpbn-test"
+            else
+              NGINX_ROOT="/var/www/orbitpbn-prod"
+            fi
+
+            sudo cp -r dist/* $NGINX_ROOT/
+            sudo chown -R www-data:www-data $NGINX_ROOT
+            sudo find $NGINX_ROOT -type d -exec chmod 755 {} \;
+            sudo find $NGINX_ROOT -type f -exec chmod 644 {} \;
+
+            # Reload Nginx to make sure new files are served
+            sudo systemctl reload nginx
