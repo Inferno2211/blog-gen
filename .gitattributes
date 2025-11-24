@@ -1,1 +1,2 @@
 astro-builds/domains/* merge=ours
+.gitignore merge=ours
