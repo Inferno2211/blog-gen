@@ -21,15 +21,14 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_KEY }}
           script: |
-            echo "GITHUB_REF = ${GITHUB_REF}"
+            BRANCH="${GITHUB_REF##*/}"
+            echo "BRANCH = ${BRANCH}"
 
-            if [ "${GITHUB_REF}" == "refs/heads/test" ]; then
+            if [ "$BRANCH" == "test" ]; then
               DIR="/root/repos/orbitpbn-test"
-              BRANCH="test"
               BACKEND_PM2="orbitpbn-test-backend"
             else
               DIR="/root/repos/orbitpbn-prod"
-              BRANCH="main"
               BACKEND_PM2="orbitpbn-prod-backend"
             fi
 
