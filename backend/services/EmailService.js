@@ -105,10 +105,10 @@ class EmailService {
       try {
         console.log(`Sending ${emailType} email to ${emailData.to} (attempt ${attempt}/${this.maxRetries})`);
 
-        // const result = await sgMail.send(emailData);
-        console.log(`(Mock) Sending email to: ${emailData.to}, Subject: ${emailData.subject}`);
-        console.log(`emailData HTML: ${emailData.html.toString()}...`); // Log first 100 chars
-        const result = [{ headers: { 'x-message-id': 'mock-message-id-12345' } }]; // Mock result
+        const result = await sgMail.send(emailData);
+        // console.log(`(Mock) Sending email to: ${emailData.to}, Subject: ${emailData.subject}`);
+        // console.log(`emailData HTML: ${emailData.html.toString()}...`); // Log first 100 chars
+        // const result = [{ headers: { 'x-message-id': 'mock-message-id-12345' } }]; // Mock result
         console.log(`Successfully sent ${emailType} email to ${emailData.to}`, {
           messageId: result[0]?.headers['x-message-id'],
           attempt
