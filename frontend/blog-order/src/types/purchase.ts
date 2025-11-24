@@ -33,6 +33,7 @@ export interface PurchaseSession {
     keyword: string;
     target_url: string;
     notes?: string;
+    type?: string;
   };
   status:
     | "PENDING_AUTH"
@@ -59,6 +60,7 @@ export interface Order {
     keyword: string;
     target_url: string;
     notes?: string;
+    type?: string;
   };
   payment_data: {
     stripe_session_id: string;

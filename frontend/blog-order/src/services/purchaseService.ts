@@ -4,7 +4,6 @@ import type {
   PurchaseInitiateResponse,
   SessionVerifyResponse,
   PurchaseCompleteResponse,
-  OrderStatusResponse,
   BackendOrderStatusResponse,
   ArticleAvailability,
 } from "../types/purchase";

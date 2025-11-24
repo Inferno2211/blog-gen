@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   getAllDomains,
   updateDomain,
@@ -10,11 +10,10 @@ import {
   getDomainStatus,
   downloadDomain,
 } from "../services/domainService";
-import type { Domain, DomainInfo, TemplateResponse } from "../types/domain";
+import type { Domain } from "../types/domain";
 
 const ViewDomains = () => {
   const [domains, setDomains] = useState<Domain[]>([]);
-  const [domainInfos, setDomainInfos] = useState<DomainInfo[]>([]);
   const [templates, setTemplates] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   // Search & filter state
@@ -29,7 +28,6 @@ const ViewDomains = () => {
   const [editForm, setEditForm] = useState<Partial<Domain>>({});
   const [showCreateFolder, setShowCreateFolder] = useState(false);
   const [newDomainName, setNewDomainName] = useState("");
-  const [selectedTemplate, setSelectedTemplate] = useState("");
   const [statuses, setStatuses] = useState<Record<string, any>>({});
 
   useEffect(() => {
@@ -198,7 +196,7 @@ const ViewDomains = () => {
 
   const handleBuildDomain = async (domainName: string) => {
     try {
-      const result = await buildDomain(domainName);
+      await buildDomain(domainName);
       alert(`Domain ${domainName} built successfully!`);
       loadData(); // Reload to get updated status
     } catch (error) {

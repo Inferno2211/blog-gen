@@ -4,7 +4,6 @@ import {
   getOrderStatus,
   regenerateBacklink,
   customerSubmitForReview,
-  customerRegenerateArticle,
   customerSubmitArticleForReview,
   cancelScheduledPublication,
   reschedulePublication,

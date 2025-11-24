@@ -5,7 +5,6 @@ import {
   Mail,
   ExternalLink,
   AlertCircle,
-  Plus,
 } from "lucide-react";
 import type { PublicArticle } from "../types/purchase";
 import { initiatePurchase } from "../services/purchaseService";
