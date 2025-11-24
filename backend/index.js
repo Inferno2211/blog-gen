@@ -10,7 +10,7 @@ dotenv.config({ silent: true });
 
 // CORS configuration
 app.use(cors({
-    origin: 'http://localhost:5173',
+    origin: ['http://localhost:5173', 'https://app.orbitpbn.com', 'https://test.orbitpbn.com'],
     credentials: true,
 }));
 

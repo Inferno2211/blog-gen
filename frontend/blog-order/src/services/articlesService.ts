@@ -1,7 +1,11 @@
 import type { Article } from "../types/article";
 import { getAuthToken } from "./authService";
 
-const API_BASE = `http://localhost:5000/api/v1/articles`;
+const API_HOST =
+  import.meta.env.VITE_REACT_APP_API_URL?.replace(/\/$/, "") ||
+  (typeof window !== "undefined" ? window.location.origin : "");
+const API_VERSION = import.meta.env.VITE_REACT_APP_API_VERSION || "1";
+const API_BASE = `${API_HOST}/v${API_VERSION}/articles`;
 
 // Helper function to get headers with auth token
 const getHeaders = () => {

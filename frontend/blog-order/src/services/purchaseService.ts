@@ -10,7 +10,10 @@ import type {
 import type { Domain } from "../types/domain";
 import { mockArticles, mockArticleAvailability } from "../utils/mockData";
 
-const API_BASE = `http://localhost:5000/api/v1`;
+const API_HOST =
+  import.meta.env.VITE_REACT_APP_API_URL?.replace(/\/$/, "") ||
+  (typeof window !== "undefined" ? window.location.origin : "");
+const API_BASE = `${API_HOST}/v${import.meta.env.VITE_REACT_APP_API_VERSION}`;
 const USE_MOCK_DATA = false; // Set to false when backend is ready
 
 // Get all available articles for browsing (public endpoint)
