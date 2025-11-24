@@ -1,0 +1,63 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    container_name: blog-gen-backend
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    env_file:
+      - ./backend/.env
+    environment:
+      - REDIS_HOST=redis
+    command: sh -c "npx prisma generate && npm run dev"
+    depends_on:
+      - redis
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    container_name: blog-gen-worker
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    env_file:
+      - ./backend/.env
+    environment:
+      - REDIS_HOST=redis
+    command: sh -c "npx prisma generate && npm run worker:dev"
+    depends_on:
+      - redis
+      - backend
+
+  frontend:
+    build:
+      context: ./frontend/blog-order
+      dockerfile: Dockerfile.dev
+    container_name: blog-gen-frontend
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend/blog-order:/app
+      - /app/node_modules
+    env_file:
+      - ./frontend/blog-order/.env
+    depends_on:
+      - backend
+
+  redis:
+    image: redis:alpine
+    container_name: blog-gen-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+volumes:
+  redis_data:
