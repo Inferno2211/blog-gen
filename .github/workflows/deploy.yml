@@ -1,56 +1,35 @@
-name: CI/CD Deploy
+- name: Deploy to VM
+  uses: appleboy/ssh-action@v1
+  with:
+    host: ${{ secrets.SSH_HOST }}
+    username: ${{ secrets.SSH_USER }}
+    key: ${{ secrets.SSH_KEY }}
+    env:
+      DEPLOY_BRANCH: ${{ github.ref_name }}
+    script: |
+      echo "Deploying branch $DEPLOY_BRANCH"
 
-on:
-  push:
-    branches:
-      - test
-      - main
+      if [ "$DEPLOY_BRANCH" == "test" ]; then
+        DIR="/root/repos/orbitpbn-test"
+        BACKEND_PM2="orbitpbn-test-backend"
+      else
+        DIR="/root/repos/orbitpbn-prod"
+        BACKEND_PM2="orbitpbn-prod-backend"
+      fi
 
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
+      mkdir -p $DIR
+      cd $DIR
 
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      if [ ! -d ".git" ]; then
+        git clone --branch $DEPLOY_BRANCH git@github.com:Inferno2211/blog-gen.git .
+      else
+        git fetch origin $DEPLOY_BRANCH
+        git reset --hard origin/$DEPLOY_BRANCH
+      fi
 
-      - name: Deploy to VM
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_KEY }}
-          script: |
-            BRANCH="${GITHUB_REF##*/}"
-            echo "BRANCH = ${BRANCH}"
-
-            if [ "$BRANCH" == "test" ]; then
-              DIR="/root/repos/orbitpbn-test"
-              BACKEND_PM2="orbitpbn-test-backend"
-            else
-              DIR="/root/repos/orbitpbn-prod"
-              BACKEND_PM2="orbitpbn-prod-backend"
-            fi
-
-            mkdir -p $DIR
-            cd $DIR
-
-            # Initialize repo if first time
-            if [ ! -d ".git" ]; then
-              git clone --branch $BRANCH git@github.com:Inferno2211/blog-gen.git .
-            else
-              git fetch origin $BRANCH
-              git reset --hard origin/$BRANCH
-            fi
-
-            # Install backend dependencies and restart PM2
-            cd backend
-            npm install
-            pm2 restart $BACKEND_PM2 || pm2 start index.js --name $BACKEND_PM2
-
-            # Build React frontend
-            cd ../frontend/blog-order
-            npm install
-            npm run build
-
-            # Build Astro frontend
+      cd backend
+      npm install
+      pm2 restart $BACKEND_PM2 || pm2 start index.js --name $BACKEND_PM2
+      cd ../frontend/blog-order
+      npm install
+      npm run build
