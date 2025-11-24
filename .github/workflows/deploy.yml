@@ -1,35 +1,55 @@
-- name: Deploy to VM
-  uses: appleboy/ssh-action@v1
-  with:
-    host: ${{ secrets.SSH_HOST }}
-    username: ${{ secrets.SSH_USER }}
-    key: ${{ secrets.SSH_KEY }}
-    env:
-      DEPLOY_BRANCH: ${{ github.ref_name }}
-    script: |
-      echo "Deploying branch $DEPLOY_BRANCH"
+name: CI/CD Deploy
 
-      if [ "$DEPLOY_BRANCH" == "test" ]; then
-        DIR="/root/repos/orbitpbn-test"
-        BACKEND_PM2="orbitpbn-test-backend"
-      else
-        DIR="/root/repos/orbitpbn-prod"
-        BACKEND_PM2="orbitpbn-prod-backend"
-      fi
+on:
+  push:
+    branches:
+      - test
+      - main
 
-      mkdir -p $DIR
-      cd $DIR
+env:
+  BRANCH_NAME: ${{ github.head_ref || github.ref_name }} 
 
-      if [ ! -d ".git" ]; then
-        git clone --branch $DEPLOY_BRANCH git@github.com:Inferno2211/blog-gen.git .
-      else
-        git fetch origin $DEPLOY_BRANCH
-        git reset --hard origin/$DEPLOY_BRANCH
-      fi
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
 
-      cd backend
-      npm install
-      pm2 restart $BACKEND_PM2 || pm2 start index.js --name $BACKEND_PM2
-      cd ../frontend/blog-order
-      npm install
-      npm run build
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to VM
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          env:
+            DEPLOY_BRANCH: ${{ github.ref_name }}
+          script: |
+            echo "Deploying branch $DEPLOY_BRANCH"
+
+            if [ "$DEPLOY_BRANCH" == "test" ]; then
+              DIR="/root/repos/orbitpbn-test"
+              BACKEND_PM2="orbitpbn-test-backend"
+            else
+              DIR="/root/repos/orbitpbn-prod"
+              BACKEND_PM2="orbitpbn-prod-backend"
+            fi
+
+            mkdir -p $DIR
+            cd $DIR
+
+            if [ ! -d ".git" ]; then
+              git clone --branch $DEPLOY_BRANCH git@github.com:Inferno2211/blog-gen.git .
+            else
+              git fetch origin $DEPLOY_BRANCH
+              git reset --hard origin/$DEPLOY_BRANCH
+            fi
+
+            cd backend
+            npm install
+            pm2 restart $BACKEND_PM2 || pm2 start index.js --name $BACKEND_PM2
+
+            cd ../frontend/blog-order
+            npm install
+            npm run build
