@@ -450,12 +450,22 @@ class PurchaseController {
                     };
                     break;
                 case 'COMPLETED':
-                    statusMessage = 'Order completed';
-                    progress = { 
-                        step: 5, 
-                        total: 5, 
-                        description: 'Your article has been published!'
-                    };
+                    // Check if order has scheduled publish
+                    if (order.scheduled_publish_at && order.scheduled_status === 'SCHEDULED') {
+                        statusMessage = 'Approved and scheduled for publication';
+                        progress = { 
+                            step: 4.5, 
+                            total: 5, 
+                            description: `Your article has been approved and will be published at ${new Date(order.scheduled_publish_at).toLocaleString()}`
+                        };
+                    } else {
+                        statusMessage = 'Order completed';
+                        progress = { 
+                            step: 5, 
+                            total: 5, 
+                            description: 'Your article has been published!'
+                        };
+                    }
                     break;
                 case 'FAILED':
                     statusMessage = 'Order processing failed';
@@ -482,7 +492,9 @@ class PurchaseController {
                         backlinkData: order.backlink_data,
                         createdAt: order.created_at,
                         completedAt: order.completed_at,
-                        customerEmail: order.customer_email
+                        customerEmail: order.customer_email,
+                        scheduledPublishAt: order.scheduled_publish_at,
+                        scheduledStatus: order.scheduled_status
                     },
                     version: order.version ? {
                         versionId: order.version_id,
