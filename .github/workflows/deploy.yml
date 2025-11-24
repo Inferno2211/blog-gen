@@ -33,12 +33,11 @@ jobs:
             cd $DIR
 
             # Initialize repo if first time
-            if [ "${GITHUB_REF}" == "refs/heads/test" ]; then
-              DIR="/root/repos/orbitpbn-test"
-              BACKEND_PM2="orbitpbn-test-backend"
+            if [ ! -d ".git" ]; then
+              git clone --branch $BRANCH git@github.com:Inferno2211/blog-gen.git .
             else
-              DIR="/root/repos/orbitpbn-prod"
-              BACKEND_PM2="orbitpbn-prod-backend"
+              git fetch origin $BRANCH
+              git reset --hard origin/$BRANCH
             fi
 
             # Install backend dependencies and restart PM2
