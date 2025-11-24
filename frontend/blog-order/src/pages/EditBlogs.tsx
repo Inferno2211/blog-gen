@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom";
+import { useParams, Link } from "react-router-dom";
 import {
   getArticle,
   editArticleContent,
@@ -11,7 +11,6 @@ import { parseMarkdownWithFrontmatter } from "../utils/markdownParser";
 
 const EditBlogs = () => {
   const { articleId } = useParams<{ articleId?: string }>();
-  const navigate = useNavigate();
 
   // State for editing
   const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);

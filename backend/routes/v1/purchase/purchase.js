@@ -41,4 +41,7 @@ router.post('/webhook', purchaseController.handleWebhook);
 // Payment status endpoint
 router.get('/payment-status/:orderId', purchaseController.getPaymentStatus);
 
+// Renewal endpoint
+router.post('/renew/:orderId', purchaseController.renewBacklink);
+
 module.exports = router;

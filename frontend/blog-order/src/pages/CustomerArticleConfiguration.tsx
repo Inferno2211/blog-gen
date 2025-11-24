@@ -59,8 +59,6 @@ interface ArticleConfigurationRequest {
 }
 
 interface ArticleConfigurationResponse {
-  success: boolean;
-  message: string;
   versionId: string;
   versionNum: number;
   content: string;

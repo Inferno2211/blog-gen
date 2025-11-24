@@ -1,10 +1,20 @@
 import axios from "axios";
 
-const API_URL =
-  import.meta.env.VITE_REACT_APP_API_URL || "http://localhost:5000";
+const normalizeBaseUrl = (url?: string) => {
+  if (!url) {
+    return typeof window !== "undefined" ? window.location.origin : "";
+  }
+  const trimmed = url.trim();
+  const withProtocol = /^https?:\/\//i.test(trimmed)
+    ? trimmed
+    : `https://${trimmed}`;
+  return withProtocol.replace(/\/+$/, "");
+};
+
+const API_HOST = normalizeBaseUrl(import.meta.env.VITE_REACT_APP_API_URL);
 const API_VERSION = import.meta.env.VITE_REACT_APP_API_VERSION || "1";
 
-const BASE_URL = `${API_URL}/v${API_VERSION}/generation`;
+const BASE_URL = `${API_HOST}/v${API_VERSION}/generation`;
 
 export interface GenerationRequest {
   domainId: string;

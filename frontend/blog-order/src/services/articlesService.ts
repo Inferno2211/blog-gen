@@ -1,7 +1,20 @@
 import type { Article } from "../types/article";
 import { getAuthToken } from "./authService";
 
-const API_BASE = `http://localhost:5000/api/v1/articles`;
+const normalizeBaseUrl = (url?: string) => {
+  if (!url) {
+    return typeof window !== "undefined" ? window.location.origin : "";
+  }
+  const trimmed = url.trim();
+  const withProtocol = /^https?:\/\//i.test(trimmed)
+    ? trimmed
+    : `https://${trimmed}`;
+  return withProtocol.replace(/\/+$/, "");
+};
+
+const API_HOST = normalizeBaseUrl(import.meta.env.VITE_REACT_APP_API_URL);
+const API_VERSION = import.meta.env.VITE_REACT_APP_API_VERSION || "1";
+const API_BASE = `${API_HOST}/v${API_VERSION}/articles`;
 
 // Helper function to get headers with auth token
 const getHeaders = () => {
@@ -110,7 +123,7 @@ export async function getBacklinkReviewQueue(
     sortBy,
     sortOrder
   });
-  
+
   const res = await fetch(`${API_BASE}/backlinkReviewQueue?${params}`, {
     headers: getHeaders()
   });

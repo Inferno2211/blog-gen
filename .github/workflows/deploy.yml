@@ -6,6 +6,9 @@ on:
       - test
       - main
 
+env:
+  BRANCH_NAME: ${{ github.head_ref || github.ref_name }} 
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -21,34 +24,46 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_KEY }}
           script: |
-            if [ "${GITHUB_REF}" == "refs/heads/test" ]; then
-              DIR="/root/respo/orbitpbn-test"
-              BRANCH="test"
+            DEPLOY_BRANCH="${{ github.ref_name }}"
+            echo "Deploying branch $DEPLOY_BRANCH"
+
+            if [ "$DEPLOY_BRANCH" == "test" ]; then
+              DIR="/root/repos/orbitpbn-test"
+              BACKEND_PM2="orbitpbn-test-backend"
             else
-              DIR="/root/respo/orbitpbn-prod"
-              BRANCH="prod"
+              DIR="/root/repos/orbitpbn-prod"
+              BACKEND_PM2="orbitpbn-prod-backend"
             fi
 
             mkdir -p $DIR
             cd $DIR
 
-            # Initialize repo if first time
-            if [ "${GITHUB_REF}" == "refs/heads/test" ]; then
-              DIR="/root/respo/orbitpbn-test"
-              BACKEND_PM2="orbitpbn-test-backend"
+            if [ ! -d ".git" ]; then
+              git clone --branch $DEPLOY_BRANCH git@github.com:Inferno2211/blog-gen.git .
             else
-              DIR="/root/respo/orbitpbn-prod"
-              BACKEND_PM2="orbitpbn-prod-backend"
+              git fetch origin $DEPLOY_BRANCH
+              git reset --hard origin/$DEPLOY_BRANCH
             fi
 
-            # Install backend dependencies and restart PM2
             cd backend
             npm install
             pm2 restart $BACKEND_PM2 || pm2 start index.js --name $BACKEND_PM2
 
-            # Build React frontend
             cd ../frontend/blog-order
             npm install
             npm run build
 
-            # Build Astro frontend
+            # Copy build to Nginx root
+            if [ "$DEPLOY_BRANCH" == "test" ]; then
+              NGINX_ROOT="/var/www/orbitpbn-test"
+            else
+              NGINX_ROOT="/var/www/orbitpbn-prod"
+            fi
+
+            sudo cp -r dist/* $NGINX_ROOT/
+            sudo chown -R www-data:www-data $NGINX_ROOT
+            sudo find $NGINX_ROOT -type d -exec chmod 755 {} \;
+            sudo find $NGINX_ROOT -type f -exec chmod 644 {} \;
+
+            # Reload Nginx to make sure new files are served
+            sudo systemctl reload nginx

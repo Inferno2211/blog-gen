@@ -4,14 +4,26 @@ import type {
   PurchaseInitiateResponse,
   SessionVerifyResponse,
   PurchaseCompleteResponse,
-  OrderStatusResponse,
   BackendOrderStatusResponse,
   ArticleAvailability,
 } from "../types/purchase";
 import type { Domain } from "../types/domain";
 import { mockArticles, mockArticleAvailability } from "../utils/mockData";
 
-const API_BASE = `http://localhost:5000/api/v1`;
+const normalizeBaseUrl = (url?: string) => {
+  if (!url) {
+    return typeof window !== "undefined" ? window.location.origin : "";
+  }
+  const trimmed = url.trim();
+  const withProtocol = /^https?:\/\//i.test(trimmed)
+    ? trimmed
+    : `https://${trimmed}`;
+  return withProtocol.replace(/\/+$/, "");
+};
+
+const API_HOST = normalizeBaseUrl(import.meta.env.VITE_REACT_APP_API_URL);
+const API_VERSION = import.meta.env.VITE_REACT_APP_API_VERSION || "1";
+const API_BASE = `${API_HOST}/v${API_VERSION}`;
 const USE_MOCK_DATA = false; // Set to false when backend is ready
 
 // Get all available articles for browsing (public endpoint)
@@ -35,9 +47,8 @@ export async function getBrowseArticles(): Promise<PublicArticle[]> {
     preview:
       article.preview && article.preview.length > 10
         ? article.preview
-        : `Learn about ${article.title}. This article covers ${
-            article.keyword || article.niche || "important topics"
-          } and provides valuable insights.`,
+        : `Learn about ${article.title}. This article covers ${article.keyword || article.niche || "important topics"
+        } and provides valuable insights.`,
   }));
 }
 
@@ -50,7 +61,7 @@ export async function getArticleAvailability(
     await new Promise((resolve) => setTimeout(resolve, 500));
     return (
       mockArticleAvailability[
-        articleId as keyof typeof mockArticleAvailability
+      articleId as keyof typeof mockArticleAvailability
       ] || { available: true }
     );
   }

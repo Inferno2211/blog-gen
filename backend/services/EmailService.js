@@ -521,6 +521,89 @@ class EmailService {
   }
 
   /**
+   * Send expiration warning email
+   * @param {string} email - Customer email
+   * @param {Object} article - Article details
+   * @param {number} daysLeft - Days remaining
+   * @param {string} orderId - Order ID for renewal link
+   */
+  async sendExpirationWarning(email, article, daysLeft, orderId) {
+    const renewalLink = `${process.env.FRONTEND_URL}/renew-backlink/${orderId}`;
+    const subject = `Action Required: Your Backlink Expires in ${daysLeft} Day${daysLeft > 1 ? 's' : ''}`;
+
+    const emailData = {
+      from: this.fromEmail,
+      to: email,
+      subject: subject,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2>Your Backlink is Expiring Soon</h2>
+          <p>The backlink in article "<strong>${article.topic || article.slug}</strong>" will expire in ${daysLeft} days.</p>
+          <p>To keep your backlink active and maintain exclusivity, please renew it now.</p>
+          <p>If you do not renew, the article will revert to its original state and become available for others to purchase.</p>
+          <div style="margin: 30px 0;">
+            <a href="${renewalLink}" style="background-color: #4F46E5; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">Renew Backlink ($15)</a>
+          </div>
+          <p>Or copy this link: ${renewalLink}</p>
+        </div>
+      `
+    };
+
+    return this._sendEmailWithRetry(emailData, 'expiration_warning');
+  }
+
+  /**
+   * Send expiration reverted notification
+   * @param {string} email - Customer email
+   * @param {Object} data - { articleTitle, articleUrl }
+   */
+  async sendExpirationReverted(email, data) {
+    const subject = `Backlink Expired: "${data.articleTitle}" has been reverted`;
+
+    const emailData = {
+      from: this.fromEmail,
+      to: email,
+      subject: subject,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2>Backlink Expired</h2>
+          <p>Your backlink in article "<strong>${data.articleTitle}</strong>" has expired and was not renewed.</p>
+          <p>The article has been reverted to its original version and is now available for other buyers.</p>
+          <p>You can view the reverted article here: <a href="${data.articleUrl}">${data.articleUrl}</a></p>
+          <p>Thank you for your business.</p>
+        </div>
+      `
+    };
+
+    return this._sendEmailWithRetry(emailData, 'expiration_reverted');
+  }
+
+  /**
+   * Send renewal confirmation
+   * @param {string} email - Customer email
+   * @param {Object} data - { articleTitle, newExpiryDate }
+   */
+  async sendRenewalConfirmation(email, data) {
+    const subject = `Renewal Successful: Backlink extended for "${data.articleTitle}"`;
+
+    const emailData = {
+      from: this.fromEmail,
+      to: email,
+      subject: subject,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2>Renewal Successful!</h2>
+          <p>Your backlink in article "<strong>${data.articleTitle}</strong>" has been successfully renewed.</p>
+          <p><strong>New Expiration Date:</strong> ${new Date(data.newExpiryDate).toLocaleDateString()}</p>
+          <p>Thank you for continuing with us!</p>
+        </div>
+      `
+    };
+
+    return this._sendEmailWithRetry(emailData, 'renewal_confirmation');
+  }
+
+  /**
    * Generate article ready email template
    * @private
    */
