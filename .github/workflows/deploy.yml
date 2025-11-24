@@ -23,9 +23,8 @@ jobs:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_KEY }}
-          env:
-            DEPLOY_BRANCH: ${{ github.ref_name }}
           script: |
+            DEPLOY_BRANCH="${{ github.ref_name }}"
             echo "Deploying branch $DEPLOY_BRANCH"
 
             if [ "$DEPLOY_BRANCH" == "test" ]; then
