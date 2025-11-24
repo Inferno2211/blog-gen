@@ -24,9 +24,11 @@ jobs:
             if [ "${GITHUB_REF}" == "refs/heads/test" ]; then
               DIR="/root/repos/orbitpbn-test"
               BRANCH="test"
+              BACKEND_PM2="orbitpbn-test-backend"
             else
               DIR="/root/repos/orbitpbn-prod"
-              BRANCH="prod"
+              BRANCH="main"
+              BACKEND_PM2="orbitpbn-prod-backend"
             fi
 
             mkdir -p $DIR
