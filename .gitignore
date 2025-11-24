@@ -1,5 +1,5 @@
 old
 .vscode
 **node_modules**
-astro-builds
+#astro-builds/domains
 *.rdb
