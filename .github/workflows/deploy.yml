@@ -22,10 +22,10 @@ jobs:
           key: ${{ secrets.SSH_KEY }}
           script: |
             if [ "${GITHUB_REF}" == "refs/heads/test" ]; then
-              DIR="/root/respo/orbitpbn-test"
+              DIR="/root/repos/orbitpbn-test"
               BRANCH="test"
             else
-              DIR="/root/respo/orbitpbn-prod"
+              DIR="/root/repos/orbitpbn-prod"
               BRANCH="prod"
             fi
 
@@ -34,10 +34,10 @@ jobs:
 
             # Initialize repo if first time
             if [ "${GITHUB_REF}" == "refs/heads/test" ]; then
-              DIR="/root/respo/orbitpbn-test"
+              DIR="/root/repos/orbitpbn-test"
               BACKEND_PM2="orbitpbn-test-backend"
             else
-              DIR="/root/respo/orbitpbn-prod"
+              DIR="/root/repos/orbitpbn-prod"
               BACKEND_PM2="orbitpbn-prod-backend"
             fi
 
