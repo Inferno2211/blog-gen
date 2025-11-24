@@ -21,6 +21,8 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_KEY }}
           script: |
+            echo "GITHUB_REF = ${GITHUB_REF}"
+
             if [ "${GITHUB_REF}" == "refs/heads/test" ]; then
               DIR="/root/repos/orbitpbn-test"
               BRANCH="test"
