@@ -45,6 +45,22 @@ async function processScheduledPublish(job) {
             throw new Error('Could not resolve domain name for article');
         }
 
+        // Validate domain folder exists
+        const path = require('path');
+        const fs = require('fs');
+        const domainsDir = process.env.DOMAINS_DIR || path.resolve(__dirname, '../../../../../astro-builds/domains');
+        const domainPath = path.join(domainsDir, domainName);
+
+        if (!fs.existsSync(domainPath)) {
+            console.error(`❌ Error: Domain folder not found: ${domainPath}`);
+            // Return specific error result instead of throwing to avoid crash loops if not handled
+            return {
+                success: false,
+                reason: 'DOMAIN_FOLDER_MISSING',
+                message: `Domain folder ${domainName} does not exist. Please ensure domain is initialized.`
+            };
+        }
+
         // Validate scheduled status
         if (version.scheduled_status !== 'SCHEDULED') {
             console.log(`⚠️  Version ${versionId} is not in SCHEDULED status (current: ${version.scheduled_status})`);
@@ -63,7 +79,7 @@ async function processScheduledPublish(job) {
 
         if (isRejected || orderFailed) {
             console.log(`❌ Version ${versionId} was explicitly rejected by admin. Cancelling scheduled publish.`);
-            
+
             // Update version status to CANCELLED
             await prisma.articleVersion.update({
                 where: { id: versionId },
@@ -114,7 +130,7 @@ async function processScheduledPublish(job) {
         // Check idempotency - already published?
         if (version.article.selected_version_id === versionId && version.article.status === 'PUBLISHED') {
             console.log(`✅ Version ${versionId} already published. Marking as executed.`);
-            
+
             await prisma.articleVersion.update({
                 where: { id: versionId },
                 data: {
@@ -168,7 +184,7 @@ async function processScheduledPublish(job) {
 
             // Check if this is a backlink purchase (Scenario 1 & 2)
             const backlinkOrder = order && order.session_type === 'PURCHASE' ? order : null;
-            
+
             if (backlinkOrder) {
                 const expiryDate = new Date();
                 expiryDate.setDate(expiryDate.getDate() + 30); // 30 days expiration
