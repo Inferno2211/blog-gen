@@ -11,4 +11,4 @@ astro-builds/domains/**/node_modules/
 # Keep the domain folders themselves
 !astro-builds/domains/
 !astro-builds/domains/**/
-
+!astro-builds/domains/**/.gitignore
