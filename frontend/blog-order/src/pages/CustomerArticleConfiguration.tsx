@@ -120,6 +120,15 @@ const CustomerArticleConfiguration: React.FC = () => {
         }));
       }
 
+      // Pre-fill backlink data if available
+      if (data.order.backlinkData) {
+        setFormData((prev) => ({
+          ...prev,
+          targetURL: data.order.backlinkData.target_url || prev.targetURL,
+          anchorText: data.order.backlinkData.keyword || prev.anchorText,
+        }));
+      }
+
       // If there is already a generated version, set it so the preview shows up
       if (data.order.generatedVersion) {
         setGeneratedVersion({
@@ -368,7 +377,7 @@ const CustomerArticleConfiguration: React.FC = () => {
                   htmlFor="targetURL"
                   className="block text-sm font-medium text-gray-700 mb-2"
                 >
-                  Target URL (Optional)
+                  Target URL *
                 </label>
                 <input
                   type="url"
@@ -378,7 +387,8 @@ const CustomerArticleConfiguration: React.FC = () => {
                   onChange={handleChange}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   disabled={generating}
-                  placeholder="https://example.com (if you want a backlink)"
+                  placeholder="https://example.com"
+                  required
                 />
               </div>
 
@@ -387,7 +397,7 @@ const CustomerArticleConfiguration: React.FC = () => {
                   htmlFor="anchorText"
                   className="block text-sm font-medium text-gray-700 mb-2"
                 >
-                  Anchor Text (Optional)
+                  Anchor Text *
                 </label>
                 <input
                   type="text"
@@ -398,6 +408,7 @@ const CustomerArticleConfiguration: React.FC = () => {
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   disabled={generating}
                   placeholder="Text to link to your URL"
+                  required
                 />
               </div>
 

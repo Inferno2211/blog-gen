@@ -144,23 +144,21 @@ export default function RequestMultipleArticles() {
         return false;
       }
 
-      if (req.includeBacklink) {
-        if (!req.targetUrl.trim()) {
-          setError(`Article ${i + 1}: Target URL is required for backlink`);
-          return false;
-        }
+      if (!req.targetUrl.trim()) {
+        setError(`Article ${i + 1}: Target URL is required`);
+        return false;
+      }
 
-        if (!req.anchorText.trim()) {
-          setError(`Article ${i + 1}: Anchor text is required for backlink`);
-          return false;
-        }
+      if (!req.anchorText.trim()) {
+        setError(`Article ${i + 1}: Anchor text is required`);
+        return false;
+      }
 
-        try {
-          new URL(req.targetUrl);
-        } catch {
-          setError(`Article ${i + 1}: Invalid target URL format`);
-          return false;
-        }
+      try {
+        new URL(req.targetUrl);
+      } catch {
+        setError(`Article ${i + 1}: Invalid target URL format`);
+        return false;
       }
     }
 
@@ -197,8 +195,8 @@ export default function RequestMultipleArticles() {
           topic: req.topic.trim(),
           niche: req.niche.trim(),
           keyword: req.keyword.trim(),
-          targetUrl: req.includeBacklink ? req.targetUrl.trim() : undefined,
-          anchorText: req.includeBacklink ? req.anchorText.trim() : undefined,
+          targetUrl: req.targetUrl.trim(),
+          anchorText: req.anchorText.trim(),
           notes: req.notes.trim(),
         })),
       });
@@ -536,72 +534,47 @@ export default function RequestMultipleArticles() {
 
                     {/* Backlink Section */}
                     <div className="md:col-span-2 border-t border-gray-200 pt-4">
-                      <div className="flex items-center mb-3">
-                        <input
-                          type="checkbox"
-                          id={`backlink-${article.id}`}
-                          checked={article.includeBacklink}
-                          onChange={(e) =>
-                            handleArticleChange(
-                              article.id,
-                              "includeBacklink",
-                              e.target.checked
-                            )
-                          }
-                          className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
-                        />
-                        <label
-                          htmlFor={`backlink-${article.id}`}
-                          className="ml-2 text-sm font-medium text-gray-700"
-                        >
-                          Include my backlink in this article (no extra charge)
-                        </label>
-                      </div>
-
-                      {article.includeBacklink && (
-                        <div className="space-y-3 bg-gray-50 p-4 rounded-md">
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                              Target URL <span className="text-red-500">*</span>
-                            </label>
-                            <input
-                              type="url"
-                              value={article.targetUrl}
-                              onChange={(e) =>
-                                handleArticleChange(
-                                  article.id,
-                                  "targetUrl",
-                                  e.target.value
-                                )
-                              }
-                              placeholder="https://yourwebsite.com/page"
-                              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
-                              required={article.includeBacklink}
-                            />
-                          </div>
-
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                              Anchor Text{" "}
-                              <span className="text-red-500">*</span>
-                            </label>
-                            <input
-                              type="text"
-                              value={article.anchorText}
-                              onChange={(e) =>
-                                handleArticleChange(
-                                  article.id,
-                                  "anchorText",
-                                  e.target.value
-                                )
-                              }
-                              placeholder="e.g., best content tools"
-                              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
-                              required={article.includeBacklink}
-                            />
-                          </div>
+                      <div className="space-y-3 bg-gray-50 p-4 rounded-md">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Target URL <span className="text-red-500">*</span>
+                          </label>
+                          <input
+                            type="url"
+                            value={article.targetUrl}
+                            onChange={(e) =>
+                              handleArticleChange(
+                                article.id,
+                                "targetUrl",
+                                e.target.value
+                              )
+                            }
+                            placeholder="https://yourwebsite.com/page"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                            required
+                          />
                         </div>
-                      )}
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Anchor Text <span className="text-red-500">*</span>
+                          </label>
+                          <input
+                            type="text"
+                            value={article.anchorText}
+                            onChange={(e) =>
+                              handleArticleChange(
+                                article.id,
+                                "anchorText",
+                                e.target.value
+                              )
+                            }
+                            placeholder="e.g., best content tools"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                            required
+                          />
+                        </div>
+                      </div>
                     </div>
 
                     {/* Notes */}

@@ -92,8 +92,8 @@ export default function RequestArticle() {
         topic: formData.topic,
         niche: formData.niche,
         keyword: formData.keyword,
-        targetUrl: formData.includeBacklink ? formData.targetUrl : undefined,
-        anchorText: formData.includeBacklink ? formData.anchorText : undefined,
+        targetUrl: formData.targetUrl,
+        anchorText: formData.anchorText,
         email: formData.email,
         notes: formData.notes,
       });
@@ -346,69 +346,50 @@ export default function RequestArticle() {
                 />
               </div>
 
-              {/* Optional Backlink Section */}
+              {/* Backlink Section */}
               <div className="md:col-span-2 border-t border-gray-200 pt-6">
-                <div className="flex items-center mb-4">
-                  <input
-                    type="checkbox"
-                    id="includeBacklink"
-                    name="includeBacklink"
-                    checked={formData.includeBacklink}
-                    onChange={handleInputChange}
-                    className="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500"
-                  />
-                  <label
-                    htmlFor="includeBacklink"
-                    className="ml-2 text-sm font-medium text-gray-700"
-                  >
-                    Include my backlink in the article (no extra charge)
-                  </label>
-                </div>
-
-                {formData.includeBacklink && (
-                  <div className="ml-6 space-y-4 bg-gray-50 p-4 rounded-md">
-                    <div>
-                      <label
-                        htmlFor="targetUrl"
-                        className="block text-sm font-medium text-gray-700 mb-2"
-                      >
-                        Your Target URL *
-                      </label>
-                      <input
-                        type="url"
-                        id="targetUrl"
-                        name="targetUrl"
-                        value={formData.targetUrl}
-                        onChange={handleInputChange}
-                        placeholder="https://yourwebsite.com/page"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
-                        required={formData.includeBacklink}
-                      />
-                    </div>
-
-                    <div>
-                      <label
-                        htmlFor="anchorText"
-                        className="block text-sm font-medium text-gray-700 mb-2"
-                      >
-                        Anchor Text *
-                      </label>
-                      <input
-                        type="text"
-                        id="anchorText"
-                        name="anchorText"
-                        value={formData.anchorText}
-                        onChange={handleInputChange}
-                        placeholder="e.g., best content tools"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
-                        required={formData.includeBacklink}
-                      />
-                      <p className="mt-1 text-sm text-gray-500">
-                        The clickable text that will link to your URL
-                      </p>
-                    </div>
+                <div className="space-y-4 bg-gray-50 p-4 rounded-md">
+                  <div>
+                    <label
+                      htmlFor="targetUrl"
+                      className="block text-sm font-medium text-gray-700 mb-2"
+                    >
+                      Your Target URL *
+                    </label>
+                    <input
+                      type="url"
+                      id="targetUrl"
+                      name="targetUrl"
+                      value={formData.targetUrl}
+                      onChange={handleInputChange}
+                      placeholder="https://yourwebsite.com/page"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                      required
+                    />
                   </div>
-                )}
+
+                  <div>
+                    <label
+                      htmlFor="anchorText"
+                      className="block text-sm font-medium text-gray-700 mb-2"
+                    >
+                      Anchor Text *
+                    </label>
+                    <input
+                      type="text"
+                      id="anchorText"
+                      name="anchorText"
+                      value={formData.anchorText}
+                      onChange={handleInputChange}
+                      placeholder="e.g., best content tools"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                      required
+                    />
+                    <p className="mt-1 text-sm text-gray-500">
+                      The clickable text that will link to your URL
+                    </p>
+                  </div>
+                </div>
               </div>
 
               <div className="md:col-span-2">
