@@ -593,13 +593,6 @@ const CustomerArticleConfiguration: React.FC = () => {
                 {submittingReview ? "Submitting..." : "Submit for Review"}
               </button>
             </div>
-
-            <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-              <h3 className="font-medium text-gray-700 mb-2">Preview Text:</h3>
-              <p className="text-gray-600 text-sm leading-relaxed">
-                {generatedVersion.previewContent}
-              </p>
-            </div>
           </div>
         )}
       </div>
