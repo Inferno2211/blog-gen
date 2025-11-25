@@ -1,6 +1,9 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { getBrowseDomains } from "../services/purchaseService";
+import {
+  getBrowseDomains,
+  initiateMultiArticlePurchase,
+} from "../services/purchaseService";
 import type { Domain } from "../types/domain";
 import LoadingSpinner from "../components/LoadingSpinner";
 import ErrorMessage from "../components/ErrorMessage";
@@ -186,38 +189,19 @@ export default function RequestMultipleArticles() {
 
     try {
       // Call backend API
-      const response = await fetch(
-        `${import.meta.env.VITE_REACT_APP_API_URL}/v${
-          import.meta.env.VITE_REACT_APP_API_VERSION
-        }/purchase/initiate-multi-article`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            domainId: selectedDomain!.id,
-            email: email.trim(),
-            articleRequests: articleRequests.map((req) => ({
-              articleTitle: req.articleTitle.trim(),
-              topic: req.topic.trim(),
-              niche: req.niche.trim(),
-              keyword: req.keyword.trim(),
-              targetUrl: req.includeBacklink ? req.targetUrl.trim() : undefined,
-              anchorText: req.includeBacklink
-                ? req.anchorText.trim()
-                : undefined,
-              notes: req.notes.trim(),
-            })),
-          }),
-        }
-      );
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to initiate request");
-      }
+      const data = await initiateMultiArticlePurchase({
+        domainId: selectedDomain!.id,
+        email: email.trim(),
+        articleRequests: articleRequests.map((req) => ({
+          articleTitle: req.articleTitle.trim(),
+          topic: req.topic.trim(),
+          niche: req.niche.trim(),
+          keyword: req.keyword.trim(),
+          targetUrl: req.includeBacklink ? req.targetUrl.trim() : undefined,
+          anchorText: req.includeBacklink ? req.anchorText.trim() : undefined,
+          notes: req.notes.trim(),
+        })),
+      });
 
       if (data.success && data.sessionId) {
         // Navigate to confirmation page

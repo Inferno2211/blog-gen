@@ -105,6 +105,29 @@ export async function initiatePurchase(
   return data;
 }
 
+// Initiate multi-article purchase (public endpoint)
+export async function initiateMultiArticlePurchase(data: {
+  domainId: string;
+  email: string;
+  articleRequests: any[];
+}): Promise<any> {
+  const res = await fetch(`${API_BASE}/purchase/initiate-multi-article`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(data),
+  });
+
+  const responseData = await res.json();
+
+  if (!res.ok) {
+    throw new Error(responseData.error || "Failed to initiate request");
+  }
+
+  return responseData;
+}
+
 // Verify session with magic link token (public endpoint)
 export async function verifySession(
   sessionToken: string
