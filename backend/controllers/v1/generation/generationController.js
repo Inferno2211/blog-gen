@@ -23,7 +23,7 @@ async function initiateBulkGeneration(req, res) {
 
         // Send magic link email with cart summary
         const magicLink = `${process.env.FRONTEND_URL}/verify-generation?token=${result.magicLinkToken}`;
-        
+
         await emailService.sendEmail(
             email,
             'Verify Your Article Generation Request',
@@ -191,43 +191,80 @@ async function handleGenerationWebhook(req, res) {
                 paymentData
             );
 
+            // Skip queuing if already processed
+            if (result.alreadyProcessed) {
+                console.log(`⚠️ Payment already processed for session ${sessionId}, skipping queue`);
+                return res.status(200).json({ received: true, alreadyProcessed: true });
+            }
+
+            // Get session details once (outside loop)
+            const sessionDetails = await generationService.getGenerationSessionDetails(sessionId);
+
+            // Create a map of articleId to article for quick lookup
+            const articleMap = new Map();
+            result.articles.forEach(article => {
+                articleMap.set(article.articleId, article);
+            });
+
             // Queue all article generation jobs
             for (const order of result.orders) {
-                const article = result.articles.find(a => a.articleId === order.articleId);
-                const sessionDetails = await generationService.getGenerationSessionDetails(sessionId);
-                const request = sessionDetails.generationRequests.find(r => 
+                const article = articleMap.get(order.articleId);
+
+                if (!article) {
+                    console.error(`❌ Article not found for order ${order.orderId}`);
+                    continue;
+                }
+
+                // Find the matching request by topic (should match since we just created them)
+                const request = sessionDetails.generationRequests.find(r =>
                     r.topic === article.topic
                 );
 
-                // Add to article generation queue
-                await queueService.addArticleGenerationJob({
-                    orderId: order.orderId,
-                    articleId: order.articleId,
-                    domainId: request.domainId,
-                    topic: request.topic,
-                    niche: request.niche || '',
-                    keyword: request.keyword || '',
-                    targetUrl: request.targetUrl,
-                    anchorText: request.anchorText,
-                    email: sessionDetails.email,
-                    isRegeneration: false
-                });
+                if (!request) {
+                    console.error(`❌ Generation request not found for article ${article.articleId} with topic ${article.topic}`);
+                    continue;
+                }
 
-                console.log(`✅ Queued article generation for order ${order.orderId}`);
+                try {
+                    // Add to article generation queue
+                    await queueService.addArticleGenerationJob({
+                        orderId: order.orderId,
+                        articleId: order.articleId,
+                        domainId: request.domainId,
+                        topic: request.topic,
+                        niche: request.niche || '',
+                        keyword: request.keyword || '',
+                        targetUrl: request.targetUrl,
+                        anchorText: request.anchorText,
+                        email: sessionDetails.email,
+                        isRegeneration: false
+                    });
+
+                    console.log(`✅ Queued article generation for order ${order.orderId}, article ${order.articleId}`);
+                } catch (queueError) {
+                    console.error(`❌ Failed to queue job for order ${order.orderId}:`, queueError);
+                    // Continue with other orders even if one fails
+                }
             }
 
             // Send bulk confirmation email
-            await emailService.sendBulkGenerationConfirmation(
-                sessionDetails.email,
-                {
-                    sessionId,
-                    orders: result.orders,
-                    totalPaid: paymentData.amount,
-                    statusUrl: `${process.env.FRONTEND_URL}/bulk-generation-status?session_id=${sessionId}`
-                }
-            );
+            try {
+                await emailService.sendBulkGenerationConfirmation(
+                    sessionDetails.email,
+                    {
+                        sessionId,
+                        orders: result.orders,
+                        totalPaid: paymentData.amount,
+                        statusUrl: `${process.env.FRONTEND_URL}/bulk-generation-status?session_id=${sessionId}`
+                    }
+                );
+                console.log(`✅ Sent confirmation email to ${sessionDetails.email}`);
+            } catch (emailError) {
+                console.error(`❌ Failed to send confirmation email:`, emailError);
+                // Don't fail the webhook if email fails
+            }
 
-            console.log(`✅ Payment webhook processed - Session: ${sessionId}, Orders: ${result.orders.length}`);
+            console.log(`✅ Payment webhook processed - Session: ${sessionId}, Orders: ${result.orders.length}, Queued: ${result.orders.length}`);
         }
 
         res.status(200).json({ received: true });

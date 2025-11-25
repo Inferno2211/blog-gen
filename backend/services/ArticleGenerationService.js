@@ -194,18 +194,48 @@ class ArticleGenerationService {
             // Check if payment already processed (idempotency)
             if (session.stripe_session_id === stripeSessionId && session.orders.length > 0) {
                 console.log(`Payment already processed for session ${sessionId}, returning existing orders`);
+
+                // Fetch articles for existing orders
+                const articleIds = session.orders.map(o => o.article_id);
+                const articles = await prisma.article.findMany({
+                    where: { id: { in: articleIds } },
+                    select: { id: true, slug: true, topic: true }
+                });
+
                 return {
                     orders: session.orders.map(o => ({
                         orderId: o.id,
                         articleId: o.article_id,
                         status: o.status
                     })),
+                    articles: articles.map(a => ({
+                        articleId: a.id,
+                        slug: a.slug,
+                        topic: a.topic
+                    })),
                     alreadyProcessed: true
                 };
             }
 
+            // Parse generation_requests from JSON (Prisma should auto-parse, but ensure it's an array)
+            let generationRequests = session.generation_requests;
+            if (!Array.isArray(generationRequests)) {
+                // If it's a string, parse it
+                if (typeof generationRequests === 'string') {
+                    generationRequests = JSON.parse(generationRequests);
+                } else if (!generationRequests) {
+                    throw new Error('Generation session has no generation requests');
+                }
+            }
+
+            if (!generationRequests || generationRequests.length === 0) {
+                throw new Error('Generation session has no generation requests');
+            }
+
+            console.log(`Processing payment for session ${sessionId} with ${generationRequests.length} requests`);
+
             // Validate topic uniqueness again (race condition protection)
-            await this._validateTopicUniqueness(session.generation_requests);
+            await this._validateTopicUniqueness(generationRequests);
 
             const orders = [];
             const createdArticles = [];
@@ -222,66 +252,78 @@ class ArticleGenerationService {
                     }
                 });
 
+                console.log(`Creating ${generationRequests.length} articles and orders for session ${sessionId}`);
+
                 // Create article + order for each request
-                for (const request of session.generation_requests) {
-                    // Create draft article
-                    const article = await tx.article.create({
-                        data: {
-                            domain_id: request.domainId,
-                            slug: this._generateSlug(request.topic),
-                            topic: request.topic,
-                            niche: request.niche || '',
-                            keyword: request.keyword || '',
-                            backlink_target: request.targetUrl,
-                            anchor: request.anchorText,
-                            status: 'DRAFT',
-                            availability_status: 'PROCESSING'
-                        }
-                    });
+                for (let i = 0; i < generationRequests.length; i++) {
+                    const request = generationRequests[i];
 
-                    createdArticles.push(article);
-
-                    // Create order with ARTICLE_GENERATION type
-                    const order = await tx.order.create({
-                        data: {
-                            session_id: sessionId,
-                            session_type: 'GENERATION',
-                            article_id: article.id,
-                            customer_email: session.email,
-                            backlink_data: {
-                                type: 'ARTICLE_GENERATION',
-                                keyword: request.anchorText,
-                                target_url: request.targetUrl,
-                                notes: request.notes || '',
+                    try {
+                        console.log(`Processing request ${i + 1}/${generationRequests.length}: ${request.topic}`);
+                        // Create draft article
+                        const article = await tx.article.create({
+                            data: {
+                                domain_id: request.domainId,
+                                slug: this._generateSlug(request.topic),
                                 topic: request.topic,
                                 niche: request.niche || '',
-                                domainId: request.domainId
-                            },
-                            payment_data: paymentData,
-                            stripe_session_id: stripeSessionId,
-                            status: 'PROCESSING'
-                        }
-                    });
+                                keyword: request.keyword || '',
+                                backlink_target: request.targetUrl,
+                                anchor: request.anchorText,
+                                status: 'DRAFT',
+                                availability_status: 'PROCESSING'
+                            }
+                        });
 
-                    orders.push(order);
+                        createdArticles.push(article);
 
-                    // Create generation request record
-                    await tx.articleGenerationRequest.create({
-                        data: {
-                            session_id: sessionId,
-                            domain_id: request.domainId,
-                            topic: request.topic,
-                            niche: request.niche || '',
-                            keyword: request.keyword || '',
-                            target_url: request.targetUrl,
-                            anchor_text: request.anchorText,
-                            notes: request.notes || '',
-                            price: request.price,
-                            article_id: article.id,
-                            order_id: order.id,
-                            status: 'PROCESSING'
-                        }
-                    });
+                        // Create order with ARTICLE_GENERATION type
+                        const order = await tx.order.create({
+                            data: {
+                                session_id: sessionId,
+                                session_type: 'GENERATION',
+                                article_id: article.id,
+                                customer_email: session.email,
+                                backlink_data: {
+                                    type: 'ARTICLE_GENERATION',
+                                    keyword: request.anchorText,
+                                    target_url: request.targetUrl,
+                                    notes: request.notes || '',
+                                    topic: request.topic,
+                                    niche: request.niche || '',
+                                    domainId: request.domainId
+                                },
+                                payment_data: paymentData,
+                                stripe_session_id: stripeSessionId,
+                                status: 'PROCESSING'
+                            }
+                        });
+
+                        orders.push(order);
+
+                        // Create generation request record
+                        await tx.articleGenerationRequest.create({
+                            data: {
+                                session_id: sessionId,
+                                domain_id: request.domainId,
+                                topic: request.topic,
+                                niche: request.niche || '',
+                                keyword: request.keyword || '',
+                                target_url: request.targetUrl,
+                                anchor_text: request.anchorText,
+                                notes: request.notes || '',
+                                price: request.price,
+                                article_id: article.id,
+                                order_id: order.id,
+                                status: 'PROCESSING'
+                            }
+                        });
+
+                        console.log(`✅ Created article ${article.id} and order ${order.id} for topic: ${request.topic}`);
+                    } catch (requestError) {
+                        console.error(`❌ Failed to process request ${i + 1} (${request.topic}):`, requestError);
+                        throw requestError; // Re-throw to rollback transaction
+                    }
                 }
             });
 
