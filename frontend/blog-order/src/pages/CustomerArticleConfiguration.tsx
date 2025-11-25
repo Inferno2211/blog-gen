@@ -119,6 +119,16 @@ const CustomerArticleConfiguration: React.FC = () => {
           topic: data.order.article.topic || prev.topic,
         }));
       }
+
+      // If there is already a generated version, set it so the preview shows up
+      if (data.order.generatedVersion) {
+        setGeneratedVersion({
+          versionId: data.order.generatedVersion.id,
+          versionNum: data.order.generatedVersion.version_num,
+          content: data.order.generatedVersion.content_md,
+          previewContent: data.order.generatedVersion.content_md,
+        });
+      }
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Failed to load order details"
