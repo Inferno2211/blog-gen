@@ -222,7 +222,9 @@ export default function BulkGenerationStatus() {
             </div>
             <div>
               <p className="text-sm text-gray-600 mb-1">Total Articles</p>
-              <p className="font-semibold text-gray-800">{orders?.length || 0}</p>
+              <p className="font-semibold text-gray-800">
+                {orders?.length || 0}
+              </p>
             </div>
             <div>
               <p className="text-sm text-gray-600 mb-1">Session Status</p>
@@ -234,120 +236,176 @@ export default function BulkGenerationStatus() {
         {/* Orders by Domain */}
         {orders && orders.length > 0 ? (
           <div className="space-y-6">
-            {Object.entries(ordersByDomain).map(([domainName, domainOrders]) => (
-              <div
-                key={domainName}
-                className="bg-white rounded-xl shadow-md overflow-hidden"
-              >
-                {/* Domain Header */}
-                <div className="bg-gradient-to-r from-green-600 to-green-700 text-white p-4">
-                  <h3 className="font-bold text-lg">{domainName}</h3>
-                  <p className="text-green-100 text-sm">
-                    {domainOrders.length} article
-                    {domainOrders.length !== 1 ? "s" : ""}
-                  </p>
-                </div>
+            {Object.entries(ordersByDomain).map(
+              ([domainName, domainOrders]) => (
+                <div
+                  key={domainName}
+                  className="bg-white rounded-xl shadow-md overflow-hidden"
+                >
+                  {/* Domain Header */}
+                  <div className="bg-gradient-to-r from-green-600 to-green-700 text-white p-4">
+                    <h3 className="font-bold text-lg">{domainName}</h3>
+                    <p className="text-green-100 text-sm">
+                      {domainOrders.length} article
+                      {domainOrders.length !== 1 ? "s" : ""}
+                    </p>
+                  </div>
 
-                {/* Domain Orders */}
-                <div className="p-6 space-y-4">
-                  {domainOrders.map((order) => (
-                    <div
-                      key={order.id}
-                      className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
-                    >
-                      {/* Order Header */}
-                      <div className="flex justify-between items-start mb-3">
-                        <div className="flex-1">
-                          <h4 className="font-semibold text-gray-800 mb-1">
-                            {order.backlink_data.topic}
-                          </h4>
-                          <p className="text-sm text-gray-500">
-                            Order ID: {order.id}
-                          </p>
-                        </div>
-                        {getStatusBadge(order.status)}
-                      </div>
-
-                      {/* Order Details */}
-                      <div className="grid md:grid-cols-2 gap-4 text-sm">
-                        <div>
-                          {order.backlink_data.niche && (
-                            <p className="text-gray-600">
-                              <span className="font-medium">Niche:</span>{" "}
-                              {order.backlink_data.niche}
+                  {/* Domain Orders */}
+                  <div className="p-6 space-y-4">
+                    {domainOrders.map((order) => (
+                      <div
+                        key={order.id}
+                        className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
+                      >
+                        {/* Order Header */}
+                        <div className="flex justify-between items-start mb-3">
+                          <div className="flex-1">
+                            <h4 className="font-semibold text-gray-800 mb-1">
+                              {order.backlink_data.topic}
+                            </h4>
+                            <p className="text-sm text-gray-500">
+                              Order ID: {order.id}
                             </p>
-                          )}
-                          {order.backlink_data.keyword && (
-                            <p className="text-gray-600">
-                              <span className="font-medium">Keyword:</span>{" "}
-                              {order.backlink_data.keyword}
-                            </p>
-                          )}
+                          </div>
+                          {getStatusBadge(order.status)}
                         </div>
-                        <div>
-                          <p className="text-gray-600">
-                            <span className="font-medium">Backlink:</span>{" "}
-                            <a
-                              href={order.backlink_data.targetUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-green-600 hover:underline"
-                            >
-                              {order.backlink_data.anchorText}
-                            </a>
-                          </p>
-                        </div>
-                      </div>
 
-                      {/* Article Info (if available) */}
-                      {order.article && (
-                        <div className="mt-4 pt-4 border-t border-gray-200">
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <p className="text-sm font-medium text-gray-700">
-                                Article:{" "}
-                                {order.article.selected_version?.title ||
-                                  "Untitled"}
+                        {/* Order Details */}
+                        <div className="grid md:grid-cols-2 gap-4 text-sm">
+                          <div>
+                            {order.backlink_data.niche && (
+                              <p className="text-gray-600">
+                                <span className="font-medium">Niche:</span>{" "}
+                                {order.backlink_data.niche}
                               </p>
-                              {order.article.selected_version && (
-                                <p className="text-xs text-gray-500">
-                                  QC Status:{" "}
-                                  {order.article.selected_version
-                                    .last_qc_status || "N/A"}
-                                </p>
-                              )}
-                            </div>
-                            {order.status === "COMPLETED" && order.article?.domain?.slug && order.article?.slug && (
-                              <a
-                                href={`/${order.article.domain.slug}/${order.article.slug}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-sm text-green-600 hover:underline font-medium"
-                              >
-                                View Article →
-                              </a>
+                            )}
+                            {order.backlink_data.keyword && (
+                              <p className="text-gray-600">
+                                <span className="font-medium">Keyword:</span>{" "}
+                                {order.backlink_data.keyword}
+                              </p>
                             )}
                           </div>
+                          <div>
+                            <p className="text-gray-600">
+                              <span className="font-medium">Backlink:</span>{" "}
+                              <a
+                                href={order.backlink_data.targetUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-green-600 hover:underline"
+                              >
+                                {order.backlink_data.anchorText}
+                              </a>
+                            </p>
+                          </div>
                         </div>
-                      )}
 
-                      {/* Timestamps */}
-                      <div className="mt-3 pt-3 border-t border-gray-200 flex justify-between text-xs text-gray-500">
-                        <span>
-                          Created: {new Date(order.created_at).toLocaleString()}
-                        </span>
-                        {order.completed_at && (
-                          <span>
-                            Completed:{" "}
-                            {new Date(order.completed_at).toLocaleString()}
-                          </span>
+                        {/* Article Info (if available) */}
+                        {order.article && (
+                          <div className="mt-4 pt-4 border-t border-gray-200">
+                            <div className="flex items-center justify-between">
+                              <div className="flex-1">
+                                <p className="text-sm font-medium text-gray-700">
+                                  Article:{" "}
+                                  {order.article.selected_version?.title ||
+                                    order.backlink_data.topic ||
+                                    "Untitled"}
+                                </p>
+                                {order.article.selected_version && (
+                                  <p className="text-xs text-gray-500">
+                                    QC Status:{" "}
+                                    {order.article.selected_version
+                                      .last_qc_status || "N/A"}
+                                  </p>
+                                )}
+                                {!order.article.selected_version && (
+                                  <p className="text-xs text-gray-500">
+                                    {order.status === "PROCESSING"
+                                      ? "Generating article..."
+                                      : order.status === "QUALITY_CHECK"
+                                      ? "Ready for preview"
+                                      : order.status === "FAILED"
+                                      ? "Generation failed"
+                                      : "In progress"}
+                                  </p>
+                                )}
+                              </div>
+                              <div className="flex gap-2">
+                                {(order.status === "QUALITY_CHECK" ||
+                                  order.status === "ADMIN_REVIEW") && (
+                                  <button
+                                    onClick={() =>
+                                      navigate(
+                                        `/order-status?order_id=${order.id}`
+                                      )
+                                    }
+                                    className="text-sm px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium"
+                                  >
+                                    Preview & Review →
+                                  </button>
+                                )}
+                                {order.status === "PROCESSING" && (
+                                  <button
+                                    onClick={() =>
+                                      navigate(
+                                        `/order-status?order_id=${order.id}`
+                                      )
+                                    }
+                                    className="text-sm px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                                  >
+                                    View Details →
+                                  </button>
+                                )}
+                                {order.status === "COMPLETED" &&
+                                  order.article?.domain?.slug &&
+                                  order.article?.slug && (
+                                    <a
+                                      href={`/${order.article.domain.slug}/${order.article.slug}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-sm px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium"
+                                    >
+                                      View Published Article →
+                                    </a>
+                                  )}
+                                {order.status === "FAILED" && (
+                                  <button
+                                    onClick={() =>
+                                      navigate(
+                                        `/order-status?order_id=${order.id}`
+                                      )
+                                    }
+                                    className="text-sm px-4 py-2 border border-red-300 text-red-700 rounded-lg hover:bg-red-50 transition-colors font-medium"
+                                  >
+                                    View Error Details →
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          </div>
                         )}
+
+                        {/* Timestamps */}
+                        <div className="mt-3 pt-3 border-t border-gray-200 flex justify-between text-xs text-gray-500">
+                          <span>
+                            Created:{" "}
+                            {new Date(order.created_at).toLocaleString()}
+                          </span>
+                          {order.completed_at && (
+                            <span>
+                              Completed:{" "}
+                              {new Date(order.completed_at).toLocaleString()}
+                            </span>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-              </div>
-            ))}
+              )
+            )}
           </div>
         ) : (
           <div className="bg-white rounded-xl shadow-md p-8 text-center">
@@ -356,7 +414,8 @@ export default function BulkGenerationStatus() {
               No Orders Yet
             </h3>
             <p className="text-gray-600">
-              Orders will appear here once payment is processed and articles start generating.
+              Orders will appear here once payment is processed and articles
+              start generating.
             </p>
             <p className="text-sm text-gray-500 mt-2">
               Session Status: {session?.status || "UNKNOWN"}

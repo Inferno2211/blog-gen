@@ -88,6 +88,17 @@ async function processArticleGeneration(job) {
 
         job.progress(90);
 
+        // Update article's selected_version_id so the version is accessible via article.selected_version
+        console.log(`🔗 Setting Article.selected_version_id to ${result.versionId}...`);
+        await prisma.article.update({
+            where: { id: articleId },
+            data: {
+                selected_version_id: result.versionId,
+                updated_at: new Date()
+            }
+        });
+        console.log('✅ Article.selected_version_id updated\n');
+
         // Update order with returned version and move to quality check status
         await prisma.order.update({
             where: { id: orderId },
