@@ -2,6 +2,7 @@ const prisma = require('../db/prisma');
 const EmailService = require('./EmailService');
 const { ValidationError, ConflictError } = require('./errors');
 const crypto = require('crypto');
+const { extractFrontmatterTitle } = require('../utils/markdownUtils');
 
 /**
  * ArticleGenerationService - Handles bulk article generation requests
@@ -329,58 +330,86 @@ class ArticleGenerationService {
             where: { session_id: sessionId },
             include: {
                 article: {
-                    select: {
-                        id: true,
-                        slug: true,
-                        topic: true,
-                        status: true,
+                    include: {
                         domain: {
                             select: {
+                                id: true,
                                 name: true,
                                 slug: true
                             }
+                        },
+                        selected_version: {
+                            select: {
+                                id: true,
+                                content_md: true,
+                                last_qc_status: true,
+                                backlink_review_status: true
+                            }
                         }
                     }
-                },
-                version: {
-                    select: {
-                        id: true,
-                        content_md: true,
-                        last_qc_status: true,
-                        backlink_review_status: true
-                    }
                 }
-            }
+            },
+            orderBy: { created_at: 'asc' }
         });
 
-        const orders = fetchedOrders.map(order => ({
-            orderId: order.id,
-            articleId: order.article_id,
-            articleSlug: order.article.slug,
-            articleTopic: order.article.topic,
-            domainName: order.article.domain?.name,
-            domainSlug: order.article.domain?.slug,
-            status: order.status,
-            versionId: order.version_id,
-            qcStatus: order.version?.last_qc_status,
-            backlinkReviewStatus: order.version?.backlink_review_status,
-            backlinkData: order.backlink_data,
-            createdAt: order.created_at,
-            completedAt: order.completed_at
-        }));
+        // Format orders to match frontend expectations
+        const orders = fetchedOrders.map(order => {
+            const backlinkData = order.backlink_data || {};
+
+            // Extract title from selected_version content if available
+            let articleTitle = order.article?.topic || 'Untitled';
+            if (order.article?.selected_version?.content_md) {
+                const extractedTitle = extractFrontmatterTitle(order.article.selected_version.content_md);
+                if (extractedTitle) {
+                    // Remove quotes if present
+                    articleTitle = extractedTitle.replace(/^["']|["']$/g, '');
+                }
+            }
+
+            return {
+                id: order.id,
+                status: order.status,
+                created_at: order.created_at,
+                completed_at: order.completed_at,
+                article: order.article ? {
+                    id: order.article.id,
+                    slug: order.article.slug,
+                    status: order.article.status,
+                    domain: order.article.domain ? {
+                        id: order.article.domain.id,
+                        name: order.article.domain.name,
+                        slug: order.article.domain.slug
+                    } : null,
+                    selected_version: order.article.selected_version ? {
+                        id: order.article.selected_version.id,
+                        title: articleTitle,
+                        last_qc_status: order.article.selected_version.last_qc_status,
+                        backlink_review_status: order.article.selected_version.backlink_review_status
+                    } : null
+                } : null,
+                backlink_data: {
+                    topic: backlinkData.topic || order.article?.topic || '',
+                    niche: backlinkData.niche || order.article?.niche || null,
+                    keyword: backlinkData.keyword || order.article?.keyword || null,
+                    targetUrl: backlinkData.target_url || order.article?.backlink_target || '',
+                    anchorText: order.article?.anchor || backlinkData.keyword || '',
+                    notes: backlinkData.notes || null
+                }
+            };
+        });
 
         const completedOrders = orders.filter(o => o.status === 'COMPLETED').length;
         const failedOrders = orders.filter(o => o.status === 'FAILED').length;
 
         return {
-            sessionId: session.id,
-            email: session.email,
-            totalArticles: session.total_articles,
-            totalPrice: session.total_price,
-            orders,
-            completedOrders,
-            failedOrders,
-            sessionStatus: session.status
+            session: {
+                id: session.id,
+                email: session.email,
+                status: session.status,
+                created_at: session.created_at
+            },
+            orders: orders,
+            totalOrders: orders.length
         };
     }
 

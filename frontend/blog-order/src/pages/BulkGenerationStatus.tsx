@@ -35,6 +35,7 @@ export default function BulkGenerationStatus() {
         sessionId!
       );
       setData(response);
+      console.log("response", response);
       setError(null);
     } catch (err: any) {
       console.error("Error fetching status:", err);
@@ -77,7 +78,7 @@ export default function BulkGenerationStatus() {
         className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium ${config.bg} ${config.text}`}
       >
         <span>{config.icon}</span>
-        {status.replace(/_/g, " ")}
+        {status?.replace(/_/g, " ")}
       </span>
     );
   };
@@ -167,10 +168,11 @@ export default function BulkGenerationStatus() {
   }
 
   const { session, orders } = data;
+  console.log("session", session);
 
-  // Group orders by domain
+  // Group orders by domain (handle empty orders case)
   const ordersByDomain = orders.reduce((acc, order) => {
-    const domainName = order.article?.domain.name || "Unknown Domain";
+    const domainName = order.article?.domain?.name || "Unknown Domain";
     if (!acc[domainName]) {
       acc[domainName] = [];
     }
@@ -216,136 +218,151 @@ export default function BulkGenerationStatus() {
           <div className="grid md:grid-cols-3 gap-6">
             <div>
               <p className="text-sm text-gray-600 mb-1">Email</p>
-              <p className="font-semibold text-gray-800">{session.email}</p>
+              <p className="font-semibold text-gray-800">{session?.email}</p>
             </div>
             <div>
               <p className="text-sm text-gray-600 mb-1">Total Articles</p>
-              <p className="font-semibold text-gray-800">{orders.length}</p>
+              <p className="font-semibold text-gray-800">{orders?.length || 0}</p>
             </div>
             <div>
               <p className="text-sm text-gray-600 mb-1">Session Status</p>
-              {getStatusBadge(session.status)}
+              {getStatusBadge(session?.status || "UNKNOWN")}
             </div>
           </div>
         </div>
 
         {/* Orders by Domain */}
-        <div className="space-y-6">
-          {Object.entries(ordersByDomain).map(([domainName, domainOrders]) => (
-            <div
-              key={domainName}
-              className="bg-white rounded-xl shadow-md overflow-hidden"
-            >
-              {/* Domain Header */}
-              <div className="bg-gradient-to-r from-green-600 to-green-700 text-white p-4">
-                <h3 className="font-bold text-lg">{domainName}</h3>
-                <p className="text-green-100 text-sm">
-                  {domainOrders.length} article
-                  {domainOrders.length !== 1 ? "s" : ""}
-                </p>
-              </div>
+        {orders && orders.length > 0 ? (
+          <div className="space-y-6">
+            {Object.entries(ordersByDomain).map(([domainName, domainOrders]) => (
+              <div
+                key={domainName}
+                className="bg-white rounded-xl shadow-md overflow-hidden"
+              >
+                {/* Domain Header */}
+                <div className="bg-gradient-to-r from-green-600 to-green-700 text-white p-4">
+                  <h3 className="font-bold text-lg">{domainName}</h3>
+                  <p className="text-green-100 text-sm">
+                    {domainOrders.length} article
+                    {domainOrders.length !== 1 ? "s" : ""}
+                  </p>
+                </div>
 
-              {/* Domain Orders */}
-              <div className="p-6 space-y-4">
-                {domainOrders.map((order) => (
-                  <div
-                    key={order.id}
-                    className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
-                  >
-                    {/* Order Header */}
-                    <div className="flex justify-between items-start mb-3">
-                      <div className="flex-1">
-                        <h4 className="font-semibold text-gray-800 mb-1">
-                          {order.backlink_data.topic}
-                        </h4>
-                        <p className="text-sm text-gray-500">
-                          Order ID: {order.id}
-                        </p>
-                      </div>
-                      {getStatusBadge(order.status)}
-                    </div>
-
-                    {/* Order Details */}
-                    <div className="grid md:grid-cols-2 gap-4 text-sm">
-                      <div>
-                        {order.backlink_data.niche && (
-                          <p className="text-gray-600">
-                            <span className="font-medium">Niche:</span>{" "}
-                            {order.backlink_data.niche}
+                {/* Domain Orders */}
+                <div className="p-6 space-y-4">
+                  {domainOrders.map((order) => (
+                    <div
+                      key={order.id}
+                      className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
+                    >
+                      {/* Order Header */}
+                      <div className="flex justify-between items-start mb-3">
+                        <div className="flex-1">
+                          <h4 className="font-semibold text-gray-800 mb-1">
+                            {order.backlink_data.topic}
+                          </h4>
+                          <p className="text-sm text-gray-500">
+                            Order ID: {order.id}
                           </p>
-                        )}
-                        {order.backlink_data.keyword && (
-                          <p className="text-gray-600">
-                            <span className="font-medium">Keyword:</span>{" "}
-                            {order.backlink_data.keyword}
-                          </p>
-                        )}
+                        </div>
+                        {getStatusBadge(order.status)}
                       </div>
-                      <div>
-                        <p className="text-gray-600">
-                          <span className="font-medium">Backlink:</span>{" "}
-                          <a
-                            href={order.backlink_data.targetUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-green-600 hover:underline"
-                          >
-                            {order.backlink_data.anchorText}
-                          </a>
-                        </p>
-                      </div>
-                    </div>
 
-                    {/* Article Info (if available) */}
-                    {order.article && (
-                      <div className="mt-4 pt-4 border-t border-gray-200">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-sm font-medium text-gray-700">
-                              Article:{" "}
-                              {order.article.selected_version?.title ||
-                                "Untitled"}
+                      {/* Order Details */}
+                      <div className="grid md:grid-cols-2 gap-4 text-sm">
+                        <div>
+                          {order.backlink_data.niche && (
+                            <p className="text-gray-600">
+                              <span className="font-medium">Niche:</span>{" "}
+                              {order.backlink_data.niche}
                             </p>
-                            {order.article.selected_version && (
-                              <p className="text-xs text-gray-500">
-                                QC Status:{" "}
-                                {order.article.selected_version
-                                  .last_qc_status || "N/A"}
-                              </p>
-                            )}
-                          </div>
-                          {order.status === "COMPLETED" && (
-                            <a
-                              href={`/${order.article.domain.slug}/${order.article.slug}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-sm text-green-600 hover:underline font-medium"
-                            >
-                              View Article →
-                            </a>
+                          )}
+                          {order.backlink_data.keyword && (
+                            <p className="text-gray-600">
+                              <span className="font-medium">Keyword:</span>{" "}
+                              {order.backlink_data.keyword}
+                            </p>
                           )}
                         </div>
+                        <div>
+                          <p className="text-gray-600">
+                            <span className="font-medium">Backlink:</span>{" "}
+                            <a
+                              href={order.backlink_data.targetUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-green-600 hover:underline"
+                            >
+                              {order.backlink_data.anchorText}
+                            </a>
+                          </p>
+                        </div>
                       </div>
-                    )}
 
-                    {/* Timestamps */}
-                    <div className="mt-3 pt-3 border-t border-gray-200 flex justify-between text-xs text-gray-500">
-                      <span>
-                        Created: {new Date(order.created_at).toLocaleString()}
-                      </span>
-                      {order.completed_at && (
-                        <span>
-                          Completed:{" "}
-                          {new Date(order.completed_at).toLocaleString()}
-                        </span>
+                      {/* Article Info (if available) */}
+                      {order.article && (
+                        <div className="mt-4 pt-4 border-t border-gray-200">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-sm font-medium text-gray-700">
+                                Article:{" "}
+                                {order.article.selected_version?.title ||
+                                  "Untitled"}
+                              </p>
+                              {order.article.selected_version && (
+                                <p className="text-xs text-gray-500">
+                                  QC Status:{" "}
+                                  {order.article.selected_version
+                                    .last_qc_status || "N/A"}
+                                </p>
+                              )}
+                            </div>
+                            {order.status === "COMPLETED" && order.article?.domain?.slug && order.article?.slug && (
+                              <a
+                                href={`/${order.article.domain.slug}/${order.article.slug}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-sm text-green-600 hover:underline font-medium"
+                              >
+                                View Article →
+                              </a>
+                            )}
+                          </div>
+                        </div>
                       )}
+
+                      {/* Timestamps */}
+                      <div className="mt-3 pt-3 border-t border-gray-200 flex justify-between text-xs text-gray-500">
+                        <span>
+                          Created: {new Date(order.created_at).toLocaleString()}
+                        </span>
+                        {order.completed_at && (
+                          <span>
+                            Completed:{" "}
+                            {new Date(order.completed_at).toLocaleString()}
+                          </span>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        ) : (
+          <div className="bg-white rounded-xl shadow-md p-8 text-center">
+            <div className="text-6xl mb-4">📝</div>
+            <h3 className="text-xl font-semibold text-gray-800 mb-2">
+              No Orders Yet
+            </h3>
+            <p className="text-gray-600">
+              Orders will appear here once payment is processed and articles start generating.
+            </p>
+            <p className="text-sm text-gray-500 mt-2">
+              Session Status: {session?.status || "UNKNOWN"}
+            </p>
+          </div>
+        )}
 
         {/* Refresh Notice */}
         <div className="mt-8 bg-blue-50 border border-blue-200 rounded-lg p-4 text-center">
