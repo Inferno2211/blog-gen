@@ -1,0 +1,4 @@
+{
+  "activeLayout": "MicroblogLayout",
+  "instructions": "To switch layouts, change the 'activeLayout' value to one of the available layout names"
+}
