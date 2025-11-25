@@ -185,9 +185,14 @@ class ArticleGenerationService {
                 throw new Error('Generation session not found');
             }
 
-            // Fetch orders separately since polymorphic relation isn't supported in schema
+            // Fetch orders separately - generation orders use backlink_data.generation_session_id
             const sessionOrders = await prisma.order.findMany({
-                where: { session_id: sessionId }
+                where: {
+                    backlink_data: {
+                        path: ['generation_session_id'],
+                        equals: sessionId
+                    }
+                }
             });
             session.orders = sessionOrders;
 
@@ -277,10 +282,10 @@ class ArticleGenerationService {
 
                         createdArticles.push(article);
 
-                        // Create order with ARTICLE_GENERATION type
+                        // Create order with ARTICLE_GENERATION type (no session_id for generation orders)
                         const order = await tx.order.create({
                             data: {
-                                session_id: sessionId,
+                                session_id: null, // Generation orders don't link to PurchaseSession
                                 session_type: 'GENERATION',
                                 article_id: article.id,
                                 customer_email: session.email,
@@ -291,7 +296,8 @@ class ArticleGenerationService {
                                     notes: request.notes || '',
                                     topic: request.topic,
                                     niche: request.niche || '',
-                                    domainId: request.domainId
+                                    domainId: request.domainId,
+                                    generation_session_id: sessionId // Track generation session in metadata
                                 },
                                 payment_data: paymentData,
                                 stripe_session_id: stripeSessionId,
@@ -369,7 +375,12 @@ class ArticleGenerationService {
         }
 
         const fetchedOrders = await prisma.order.findMany({
-            where: { session_id: sessionId },
+            where: {
+                backlink_data: {
+                    path: ['generation_session_id'],
+                    equals: sessionId
+                }
+            },
             include: {
                 article: {
                     include: {

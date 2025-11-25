@@ -3,6 +3,7 @@ const SessionService = require('../../../services/SessionService');
 const EmailService = require('../../../services/EmailService');
 const StripeService = require('../../../services/StripeService');
 const QueueService = require('../../../services/queue/QueueService');
+const ArticleGenerationService = require('../../../services/ArticleGenerationService');
 const { ValidationError, NotFoundError, ConflictError } = require('../../../services/errors');
 const prisma = require('../../../db/prisma');
 
@@ -17,6 +18,7 @@ class PurchaseController {
         this.emailService = new EmailService();
         this.stripeService = new StripeService();
         this.queueService = new QueueService();
+        this.articleGenerationService = new ArticleGenerationService();
     }
 
     /**
@@ -533,6 +535,96 @@ class PurchaseController {
 
             // Verify webhook signature and get event
             const event = this.stripeService.verifyWebhookSignature(payload, signature);
+
+            // Debug: If this checkout session contains generation metadata, handle it here
+            try {
+                if (event.type === 'checkout.session.completed') {
+                    const checkoutSession = event.data.object || {};
+                    const generationSessionId = checkoutSession.metadata && checkoutSession.metadata.generation_session_id;
+
+                    if (generationSessionId) {
+                        console.log(`Purchase webhook received generation checkout session: ${generationSessionId}. Dispatching to generation service.`);
+
+                        const generationPaymentData = {
+                            stripe_session_id: checkoutSession.id,
+                            amount: checkoutSession.amount_total / 100,
+                            currency: checkoutSession.currency,
+                            status: checkoutSession.payment_status
+                        };
+
+                        try {
+                            const result = await this.articleGenerationService.completeGenerationPayment(
+                                generationSessionId,
+                                checkoutSession.id,
+                                generationPaymentData
+                            );
+
+                            // If already processed, log and skip queueing
+                            if (result.alreadyProcessed) {
+                                console.log(`Generation payment already processed for session ${generationSessionId}.`);
+                            } else {
+                                // Queue generation jobs similarly to generation controller
+                                const sessionDetails = await this.articleGenerationService.getGenerationSessionDetails(generationSessionId);
+
+                                const articleMap = new Map();
+                                result.articles.forEach(a => articleMap.set(a.articleId, a));
+
+                                for (const order of result.orders) {
+                                    const article = articleMap.get(order.articleId);
+                                    if (!article) {
+                                        console.error(`❌ Article not found for order ${order.orderId} in generation dispatch`);
+                                        continue;
+                                    }
+
+                                    const request = sessionDetails.generationRequests.find(r => r.topic === article.topic);
+                                    if (!request) {
+                                        console.error(`❌ Generation request not found for article ${article.articleId} with topic ${article.topic}`);
+                                        continue;
+                                    }
+
+                                    try {
+                                        await this.queueService.addArticleGenerationJob({
+                                            orderId: order.orderId,
+                                            articleId: order.articleId,
+                                            domainId: request.domainId,
+                                            topic: request.topic,
+                                            niche: request.niche || '',
+                                            keyword: request.keyword || '',
+                                            targetUrl: request.targetUrl,
+                                            anchorText: request.anchorText,
+                                            email: sessionDetails.email,
+                                            isRegeneration: false
+                                        });
+
+                                        console.log(`✅ Queued article generation for order ${order.orderId}, article ${order.articleId} (from purchase webhook)`);
+                                    } catch (queueError) {
+                                        console.error(`❌ Failed to queue job for order ${order.orderId} (from purchase webhook):`, queueError);
+                                    }
+                                }
+
+                                try {
+                                    await this.emailService.sendBulkGenerationConfirmation(
+                                        sessionDetails.email,
+                                        {
+                                            sessionId: generationSessionId,
+                                            orders: result.orders,
+                                            totalPaid: generationPaymentData.amount,
+                                            statusUrl: `${process.env.FRONTEND_URL}/bulk-generation-status?session_id=${generationSessionId}`
+                                        }
+                                    );
+                                    console.log(`✅ Sent generation confirmation email to ${sessionDetails.email}`);
+                                } catch (emailErr) {
+                                    console.error('❌ Failed to send generation confirmation email:', emailErr);
+                                }
+                            }
+                        } catch (err) {
+                            console.error('❌ Error while processing generation payment within purchase webhook:', err);
+                        }
+                    }
+                }
+            } catch (dispatchErr) {
+                console.error('❌ Error during special generation dispatch:', dispatchErr);
+            }
             
             // Handle the webhook event
             const result = await this.stripeService.handleWebhookEvent(event);

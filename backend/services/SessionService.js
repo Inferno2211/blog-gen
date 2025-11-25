@@ -417,13 +417,19 @@ class SessionService {
             }
 
             // Check session status
-            if (session.status !== 'PENDING_AUTH' && session.status !== 'PAID') {
+            if (session.status !== 'PENDING_AUTH' && session.status !== 'AUTHENTICATED' && session.status !== 'PAID') {
                 throw new Error(`Session is not in valid state. Current status: ${session.status}`);
             }
 
             // If session is already PAID, return it as-is so callers can handle already-paid flows
             if (session.status === 'PAID') {
                 console.log(`Generation magic link verified (already PAID) - Session: ${session.id}, Email: ${session.email}`);
+                return session;
+            }
+
+            // If session is already AUTHENTICATED, return it as-is (idempotent)
+            if (session.status === 'AUTHENTICATED') {
+                console.log(`Generation magic link verified (already AUTHENTICATED) - Session: ${session.id}, Email: ${session.email}`);
                 return session;
             }
 

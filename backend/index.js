@@ -16,6 +16,7 @@ app.use(cors({
 
 // Apply JSON parsing middleware to all routes EXCEPT webhooks
 app.use('/api/v1/purchase/webhook', express.raw({ type: 'application/json' }));
+app.use('/api/v1/generation/webhook', express.raw({ type: 'application/json' }));
 app.use(express.json());
 
 const appRoutes = require('./routes/index.js');

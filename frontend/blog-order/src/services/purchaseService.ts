@@ -47,8 +47,9 @@ export async function getBrowseArticles(): Promise<PublicArticle[]> {
     preview:
       article.preview && article.preview.length > 10
         ? article.preview
-        : `Learn about ${article.title}. This article covers ${article.keyword || article.niche || "important topics"
-        } and provides valuable insights.`,
+        : `Learn about ${article.title}. This article covers ${
+            article.keyword || article.niche || "important topics"
+          } and provides valuable insights.`,
   }));
 }
 
@@ -61,7 +62,7 @@ export async function getArticleAvailability(
     await new Promise((resolve) => setTimeout(resolve, 500));
     return (
       mockArticleAvailability[
-      articleId as keyof typeof mockArticleAvailability
+        articleId as keyof typeof mockArticleAvailability
       ] || { available: true }
     );
   }

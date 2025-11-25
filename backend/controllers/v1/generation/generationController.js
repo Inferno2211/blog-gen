@@ -164,7 +164,8 @@ async function handleGenerationWebhook(req, res) {
     const sig = req.headers['stripe-signature'];
 
     try {
-        const event = stripeService.constructWebhookEvent(req.body, sig);
+        const event = stripeService.verifyWebhookSignature(req.body, sig);
+        console.log(`Webhook event type: ${event.type}`);
 
         if (event.type === 'checkout.session.completed') {
             const checkoutSession = event.data.object;
