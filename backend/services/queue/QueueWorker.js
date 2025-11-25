@@ -27,25 +27,46 @@ class QueueWorker {
 
         // Set up processors for each queue
         console.log('📋 Registering queue processors...');
-        
+
         this.queueService.articleGenerationQueue.process('generate-article', 1, async (job) => {
-            console.log(`\n🎯 Picked up job from article-generation queue: ${job.id}`);
-            return await processArticleGeneration(job);
+            try {
+                console.log(`\n🎯 Picked up job from article-generation queue: ${job.id}`);
+                return await processArticleGeneration(job);
+            } catch (error) {
+                console.error(`❌ Critical error processing article-generation job ${job.id}:`, error);
+                // Ensure error is propagated to Bull so job is marked as failed, but worker stays alive
+                throw error;
+            }
         });
 
         this.queueService.backlinkIntegrationQueue.process('integrate-backlink', 1, async (job) => {
-            console.log(`\n🎯 Picked up job from backlink-integration queue: ${job.id}`);
-            return await processBacklinkIntegration(job);
+            try {
+                console.log(`\n🎯 Picked up job from backlink-integration queue: ${job.id}`);
+                return await processBacklinkIntegration(job);
+            } catch (error) {
+                console.error(`❌ Critical error processing backlink-integration job ${job.id}:`, error);
+                throw error;
+            }
         });
 
         this.queueService.scheduledPublishQueue.process('publish-version', 1, async (job) => {
-            console.log(`\n🎯 Picked up job from scheduled-publish queue: ${job.id}`);
-            return await processScheduledPublish(job);
+            try {
+                console.log(`\n🎯 Picked up job from scheduled-publish queue: ${job.id}`);
+                return await processScheduledPublish(job);
+            } catch (error) {
+                console.error(`❌ Critical error processing scheduled-publish job ${job.id}:`, error);
+                throw error;
+            }
         });
 
         this.queueService.expirationCheckQueue.process('check-expiration', 1, async (job) => {
-            console.log(`\n🎯 Picked up job from expiration-check queue: ${job.id}`);
-            return await processExpirationCheck(job);
+            try {
+                console.log(`\n🎯 Picked up job from expiration-check queue: ${job.id}`);
+                return await processExpirationCheck(job);
+            } catch (error) {
+                console.error(`❌ Critical error processing expiration-check job ${job.id}:`, error);
+                throw error;
+            }
         });
 
         console.log('✅ Queue processors registered\n');
@@ -87,7 +108,7 @@ class QueueWorker {
 
         try {
             const prisma = require('../../db/prisma');
-            
+
             // Find all scheduled versions
             const scheduledVersions = await prisma.articleVersion.findMany({
                 where: {
@@ -139,7 +160,7 @@ class QueueWorker {
                     // to handle cases where the job was cancelled or completed without publishing
                     if (['completed', 'failed', 'stalled'].includes(state)) {
                         const delay = Math.max(0, scheduledAt - Date.now());
-                        console.log(`🔁 Job ${jobId} is in terminal state (${state}). Recreating (delay ${Math.round(delay/1000)}s)`);
+                        console.log(`🔁 Job ${jobId} is in terminal state (${state}). Recreating (delay ${Math.round(delay / 1000)}s)`);
                         try {
                             await existingJob.remove();
                             await this.queueService.addScheduledPublishJob({

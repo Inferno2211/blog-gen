@@ -3,3 +3,12 @@ old
 **node_modules**
 
 *.rdb
+# Ignore build outputs in domain folders
+astro-builds/domains/**/dist/
+astro-builds/domains/**/.astro/
+astro-builds/domains/**/node_modules/
+
+# Keep the domain folders themselves
+!astro-builds/domains/
+!astro-builds/domains/**/
+
