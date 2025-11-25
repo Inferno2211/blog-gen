@@ -131,7 +131,7 @@ class ArticleGenerationService {
         // Populate domain details for each request
         const requests = session.generation_requests;
         const domainIds = [...new Set(requests.map(r => r.domainId))];
-        
+
         const domains = await prisma.domain.findMany({
             where: { id: { in: domainIds } },
             select: {
@@ -177,13 +177,18 @@ class ArticleGenerationService {
         try {
             // Fetch generation session
             const session = await prisma.articleGenerationSession.findUnique({
-                where: { id: sessionId },
-                include: { orders: true }
+                where: { id: sessionId }
             });
 
             if (!session) {
                 throw new Error('Generation session not found');
             }
+
+            // Fetch orders separately since polymorphic relation isn't supported in schema
+            const sessionOrders = await prisma.order.findMany({
+                where: { session_id: sessionId }
+            });
+            session.orders = sessionOrders;
 
             // Check if payment already processed (idempotency)
             if (session.stripe_session_id === stripeSessionId && session.orders.length > 0) {
@@ -296,12 +301,12 @@ class ArticleGenerationService {
 
         } catch (error) {
             console.error('Failed to complete generation payment:', error);
-            
+
             // Handle duplicate topic error gracefully
             if (error.code === 'P2002') {
                 throw new Error('One or more articles with these topics already exist on the selected domains');
             }
-            
+
             throw new Error(`Failed to complete payment: ${error.message}`);
         }
     }
@@ -313,42 +318,42 @@ class ArticleGenerationService {
      */
     async getBulkGenerationStatus(sessionId) {
         const session = await prisma.articleGenerationSession.findUnique({
-            where: { id: sessionId },
-            include: {
-                orders: {
-                    include: {
-                        article: {
-                            select: {
-                                id: true,
-                                slug: true,
-                                topic: true,
-                                status: true,
-                                domain: {
-                                    select: {
-                                        name: true,
-                                        slug: true
-                                    }
-                                }
-                            }
-                        },
-                        version: {
-                            select: {
-                                id: true,
-                                content_md: true,
-                                last_qc_status: true,
-                                backlink_review_status: true
-                            }
-                        }
-                    }
-                }
-            }
+            where: { id: sessionId }
         });
 
         if (!session) {
             throw new Error('Generation session not found');
         }
 
-        const orders = session.orders.map(order => ({
+        const fetchedOrders = await prisma.order.findMany({
+            where: { session_id: sessionId },
+            include: {
+                article: {
+                    select: {
+                        id: true,
+                        slug: true,
+                        topic: true,
+                        status: true,
+                        domain: {
+                            select: {
+                                name: true,
+                                slug: true
+                            }
+                        }
+                    }
+                },
+                version: {
+                    select: {
+                        id: true,
+                        content_md: true,
+                        last_qc_status: true,
+                        backlink_review_status: true
+                    }
+                }
+            }
+        });
+
+        const orders = fetchedOrders.map(order => ({
             orderId: order.id,
             articleId: order.article_id,
             articleSlug: order.article.slug,
@@ -406,7 +411,7 @@ class ArticleGenerationService {
     async _validateTopicUniqueness(requests) {
         for (const request of requests) {
             const normalizedTopic = request.topic.toLowerCase().trim();
-            
+
             // Check if article with this topic already exists on this domain
             const existing = await prisma.article.findFirst({
                 where: {
@@ -433,7 +438,7 @@ class ArticleGenerationService {
             .toLowerCase()
             .replace(/[^a-z0-9]+/g, '-')
             .replace(/^-+|-+$/g, '');
-        
+
         const randomSuffix = crypto.randomBytes(4).toString('hex');
         return `${baseSlug}-${randomSuffix}`;
     }
