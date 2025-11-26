@@ -4,11 +4,8 @@ import type {
   BlogApiResponse,
   BlogVersion,
 } from "../types/blog";
-import {
-  generateBlog,
-  generateBlogVersion,
-  setSelectedVersion as setSelectedVersionApi,
-} from "../services/blogService";
+import { generateBlog, generateBlogVersion } from "../services/blogService";
+import { setSelectedVersion as setSelectedVersionApi } from "../services/articlesService";
 import { getAllDomains } from "../services/domainService";
 import type { Domain } from "../types/domain";
 import BlogLayout from "../components/BlogLayout";
