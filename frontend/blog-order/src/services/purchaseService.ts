@@ -9,21 +9,9 @@ import type {
 } from "../types/purchase";
 import type { Domain } from "../types/domain";
 import { mockArticles, mockArticleAvailability } from "../utils/mockData";
+import { apiBase } from "../utils/api";
 
-const normalizeBaseUrl = (url?: string) => {
-  if (!url) {
-    return typeof window !== "undefined" ? window.location.origin : "";
-  }
-  const trimmed = url.trim();
-  const withProtocol = /^https?:\/\//i.test(trimmed)
-    ? trimmed
-    : `https://${trimmed}`;
-  return withProtocol.replace(/\/+$/, "");
-};
-
-const API_HOST = normalizeBaseUrl(import.meta.env.VITE_REACT_APP_API_URL);
-const API_VERSION = import.meta.env.VITE_REACT_APP_API_VERSION || "1";
-const API_BASE = `${API_HOST}/v${API_VERSION}`;
+const API_BASE = apiBase();
 const USE_MOCK_DATA = false; // Set to false when backend is ready
 
 // Get all available articles for browsing (public endpoint)

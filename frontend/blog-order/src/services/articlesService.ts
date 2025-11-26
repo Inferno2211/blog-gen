@@ -1,34 +1,22 @@
 import type { Article } from "../types/article";
 import { getAuthToken } from "./authService";
+import { apiBase } from "../utils/api";
 
-const normalizeBaseUrl = (url?: string) => {
-  if (!url) {
-    return typeof window !== "undefined" ? window.location.origin : "";
-  }
-  const trimmed = url.trim();
-  const withProtocol = /^https?:\/\//i.test(trimmed)
-    ? trimmed
-    : `https://${trimmed}`;
-  return withProtocol.replace(/\/+$/, "");
-};
-
-const API_HOST = normalizeBaseUrl(import.meta.env.VITE_REACT_APP_API_URL);
-const API_VERSION = import.meta.env.VITE_REACT_APP_API_VERSION || "1";
-const API_BASE = `${API_HOST}/v${API_VERSION}/articles`;
+const API_BASE = apiBase("articles");
 
 // Helper function to get headers with auth token
 const getHeaders = () => {
   const token = getAuthToken();
   return {
-    'Content-Type': 'application/json',
-    ...(token && { 'Authorization': `Bearer ${token}` })
+    "Content-Type": "application/json",
+    ...(token && { Authorization: `Bearer ${token}` }),
   };
 };
 
 // Get all articles with versions and domain information
 export async function getAllArticles(): Promise<Article[]> {
   const res = await fetch(`${API_BASE}/getAllArticles`, {
-    headers: getHeaders()
+    headers: getHeaders(),
   });
   if (!res.ok) throw new Error("Failed to get articles");
   return res.json();
@@ -37,7 +25,7 @@ export async function getAllArticles(): Promise<Article[]> {
 // Get article by ID
 export async function getArticle(id: string): Promise<Article> {
   const res = await fetch(`${API_BASE}/getArticleById/${id}`, {
-    headers: getHeaders()
+    headers: getHeaders(),
   });
   if (!res.ok) throw new Error("Failed to get article");
   return res.json();
@@ -82,9 +70,7 @@ export async function setSelectedVersion(
 }
 
 // Publish blog
-export async function publishBlog(
-  articleId: string
-): Promise<{
+export async function publishBlog(articleId: string): Promise<{
   success: boolean;
   message: string;
   articleId: string;
@@ -114,18 +100,18 @@ export async function selectVersion(
 
 // Backlink review workflow methods
 export async function getBacklinkReviewQueue(
-  status: string = 'PENDING_REVIEW',
-  sortBy: string = 'created_at',
-  sortOrder: string = 'desc'
+  status: string = "PENDING_REVIEW",
+  sortBy: string = "created_at",
+  sortOrder: string = "desc"
 ): Promise<any[]> {
   const params = new URLSearchParams({
     status,
     sortBy,
-    sortOrder
+    sortOrder,
   });
 
   const res = await fetch(`${API_BASE}/backlinkReviewQueue?${params}`, {
-    headers: getHeaders()
+    headers: getHeaders(),
   });
   if (!res.ok) throw new Error("Failed to get backlink review queue");
   return res.json();

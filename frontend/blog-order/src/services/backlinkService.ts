@@ -3,10 +3,10 @@ import type {
   BacklinkIntegrationResponse,
 } from "../types/backlink";
 import { getAuthToken } from "./authService";
+import { apiBase } from "../utils/api";
 
-const API_BASE = `${import.meta.env.VITE_REACT_APP_API_URL}/v${
-  import.meta.env.VITE_REACT_APP_API_VERSION
-}`;
+// Use top-level API base; endpoints in this file are under /articles and /purchase
+const API_BASE = apiBase();
 
 // Admin backlink integration
 export async function integrateBacklink(
