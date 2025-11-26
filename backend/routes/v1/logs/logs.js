@@ -9,7 +9,7 @@ const { authenticateAdmin } = require('../../../middleware/auth');
  */
 
 // GET /api/v1/logs - Get worker logs
-router.get('/', authenticateAdmin, logsController.getLogs);
+router.get('/', logsController.getLogs);
 
 module.exports = router;
 

@@ -8,12 +8,12 @@ class StripeService {
     if (!process.env.STRIPE_SECRET_KEY) {
       throw new Error('STRIPE_SECRET_KEY environment variable is required');
     }
-    
+
     this.stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
     this.prisma = new PrismaClient();
     this.webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
     this.queueService = new QueueService();
-    
+
     // Pricing: $15.00 USD for backlinks, $25.00 USD for article generation
     this.BACKLINK_PRICE = 1500; // in cents
     this.ARTICLE_GENERATION_PRICE = 2500; // in cents
@@ -30,14 +30,14 @@ class StripeService {
     try {
       const { article_id, backlink_data, email, type } = sessionData;
       const isArticleGeneration = type === 'article_generation';
-      
+
       // Determine pricing and product details based on type
       const price = isArticleGeneration ? this.ARTICLE_GENERATION_PRICE : this.BACKLINK_PRICE;
       const productName = isArticleGeneration ? 'Custom Article Generation' : 'Article Backlink Placement';
-      const description = isArticleGeneration 
-        ? `Custom AI-generated article for domain with title: "${backlink_data.articleTitle || 'Custom Article'}"` 
+      const description = isArticleGeneration
+        ? `Custom AI-generated article for domain with title: "${backlink_data.articleTitle || 'Custom Article'}"`
         : `Contextual backlink placement for "${backlink_data.keyword}" in article ${article_id}`;
-      
+
       // Create checkout session with dynamic pricing
       const checkoutSession = await this.stripe.checkout.sessions.create({
         payment_method_types: ['card'],
@@ -117,7 +117,7 @@ class StripeService {
   async verifyCheckoutSession(stripeSessionId) {
     try {
       const session = await this.stripe.checkout.sessions.retrieve(stripeSessionId);
-      
+
       return {
         id: session.id,
         payment_status: session.payment_status,
@@ -142,18 +142,18 @@ class StripeService {
   async processPaymentSuccess(stripeSessionId) {
     try {
       const session = await this.verifyCheckoutSession(stripeSessionId);
-      
+
       if (session.payment_status !== 'paid') {
         throw new AppError('Payment not completed', 400, 'PAYMENT_NOT_COMPLETED');
       }
 
       // Handle Renewal
       if (session.metadata.type === 'renewal') {
-          return await this._handleRenewalSuccess(session);
+        return await this._handleRenewalSuccess(session);
       }
 
       const purchaseSessionId = session.metadata.purchase_session_id;
-      
+
       // Check if order already exists (idempotency check)
       const existingOrder = await this.prisma.order.findFirst({
         where: {
@@ -176,7 +176,7 @@ class StripeService {
           duplicate: true
         };
       }
-      
+
       // Update purchase session status
       const updatedSession = await this.prisma.purchaseSession.update({
         where: { id: purchaseSessionId },
@@ -214,11 +214,11 @@ class StripeService {
 
       // Determine if this is article generation or backlink order
       const isArticleGeneration = session.metadata.type === 'article_generation';
-      
+
       // For article generation, use the article_id from the session (created during initiation)
       // For backlinks, use the article_id from metadata
-      const articleId = isArticleGeneration 
-        ? purchaseSession.article_id 
+      const articleId = isArticleGeneration
+        ? purchaseSession.article_id
         : session.metadata.article_id;
 
       if (!articleId) {
@@ -325,7 +325,7 @@ class StripeService {
       }
 
       const paymentIntentId = order.payment_data.payment_intent;
-      
+
       if (!paymentIntentId) {
         throw new AppError('No payment intent found for refund', 400, 'NO_PAYMENT_INTENT');
       }
@@ -384,23 +384,26 @@ class StripeService {
    * Verify Stripe webhook signature
    * @param {string} payload - Raw request body
    * @param {string} signature - Stripe signature header
+   * @param {string} [secret] - Optional webhook secret to use instead of default
    * @returns {Object} Verified webhook event
    */
-  verifyWebhookSignature(payload, signature) {
+  verifyWebhookSignature(payload, signature, secret) {
     try {
-      if (!this.webhookSecret) {
+      const webhookSecret = secret || this.webhookSecret;
+
+      if (!webhookSecret) {
         throw new Error('Stripe webhook secret not configured');
       }
 
-      return this.stripe.webhooks.constructEvent(payload, signature, this.webhookSecret);
+      return this.stripe.webhooks.constructEvent(payload, signature, webhookSecret);
     } catch (error) {
       console.error('Webhook signature verification failed:', error);
-      
+
       // Re-throw specific configuration errors
       if (error.message === 'Stripe webhook secret not configured') {
         throw error;
       }
-      
+
       throw new AppError('Invalid webhook signature', 400, 'WEBHOOK_VERIFICATION_ERROR');
     }
   }
@@ -415,16 +418,16 @@ class StripeService {
       switch (event.type) {
         case 'checkout.session.completed':
           return await this.handleCheckoutCompleted(event.data.object);
-        
+
         case 'payment_intent.succeeded':
           return await this.handlePaymentSucceeded(event.data.object);
-        
+
         case 'payment_intent.payment_failed':
           return await this.handlePaymentFailed(event.data.object);
-        
+
         case 'charge.dispute.created':
           return await this.handleChargeDispute(event.data.object);
-        
+
         default:
           console.log(`Unhandled webhook event type: ${event.type}`);
           return { handled: false, type: event.type };
@@ -444,7 +447,7 @@ class StripeService {
     try {
       const purchaseSessionId = session.metadata.purchase_session_id;
       const orderType = session.metadata.type || 'backlink'; // Default to 'backlink' for backward compatibility
-      
+
       if (!purchaseSessionId) {
         console.warn('No purchase session ID in checkout session metadata');
         return { handled: false, reason: 'No purchase session ID' };
@@ -479,10 +482,10 @@ class StripeService {
   async handlePaymentSucceeded(paymentIntent) {
     try {
       console.log(`Payment succeeded: ${paymentIntent.id}`);
-      
+
       // Additional payment success logic can be added here
       // For now, the main processing happens in checkout.session.completed
-      
+
       return { handled: true, paymentIntentId: paymentIntent.id };
 
     } catch (error) {
@@ -499,7 +502,7 @@ class StripeService {
   async handlePaymentFailed(paymentIntent) {
     try {
       console.log(`Payment failed: ${paymentIntent.id}`);
-      
+
       // Find and update related purchase session
       const order = await this.prisma.order.findFirst({
         where: {
@@ -538,10 +541,10 @@ class StripeService {
   async handleChargeDispute(dispute) {
     try {
       console.log(`Charge dispute created: ${dispute.id}`);
-      
+
       // Log dispute for manual review
       // Additional dispute handling logic can be added here
-      
+
       return { handled: true, disputeId: dispute.id };
 
     } catch (error) {
@@ -566,10 +569,10 @@ class StripeService {
       }
 
       const stripeSessionId = order.payment_data.stripe_session_id;
-      
+
       if (stripeSessionId) {
         const session = await this.verifyCheckoutSession(stripeSessionId);
-        
+
         return {
           orderId,
           paymentStatus: session.payment_status,
@@ -946,39 +949,39 @@ class StripeService {
 
     // Update article expiration
     const article = await this.prisma.article.findUnique({ where: { id: articleId } });
-    
+
     if (!article) {
-        throw new AppError('Article not found for renewal', 404);
+      throw new AppError('Article not found for renewal', 404);
     }
 
     // Calculate new expiry date (add 30 days to current expiry or now if expired)
     let newExpiry = new Date(article.backlink_expiry_date || Date.now());
     if (newExpiry < new Date()) {
-        newExpiry = new Date(); // If already expired, start from now
+      newExpiry = new Date(); // If already expired, start from now
     }
     newExpiry.setDate(newExpiry.getDate() + 30);
 
     await this.prisma.article.update({
-        where: { id: articleId },
-        data: {
-            backlink_expiry_date: newExpiry,
-            availability_status: 'SOLD_OUT' // Ensure it stays sold out
-        }
+      where: { id: articleId },
+      data: {
+        backlink_expiry_date: newExpiry,
+        availability_status: 'SOLD_OUT' // Ensure it stays sold out
+      }
     });
 
     // Send confirmation email
     const EmailService = require('./EmailService');
     const emailService = new EmailService();
     await emailService.sendRenewalConfirmation(session.customer_email, {
-        articleTitle: article.topic || article.slug,
-        newExpiryDate: newExpiry
+      articleTitle: article.topic || article.slug,
+      newExpiryDate: newExpiry
     });
 
     return {
-        success: true,
-        type: 'renewal',
-        orderId,
-        newExpiry
+      success: true,
+      type: 'renewal',
+      orderId,
+      newExpiry
     };
   }
 }
