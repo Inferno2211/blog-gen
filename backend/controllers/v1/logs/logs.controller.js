@@ -32,12 +32,13 @@ const getLogs = async (req, res) => {
         // Execute PM2 logs command
         const command = `pm2 logs orbitpbn-test-backend --lines ${lines} --nostream`;
         const { stdout, stderr } = await execPromise(command);
+        
+        const rawLogs = stdout || stderr;
 
-        // Return logs
         return res.status(200).json({
             success: true,
-            logs: stdout || stderr,
-            lines: lines
+            logs: rawLogs.split("\n"),
+            lines
         });
     } catch (error) {
         console.error('Error fetching logs:', error);

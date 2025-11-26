@@ -162,21 +162,44 @@ async function getBulkGenerationStatus(req, res) {
  */
 async function handleGenerationWebhook(req, res) {
     const sig = req.headers['stripe-signature'];
+    const requestId = `wh_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+    console.log(`[${requestId}] Webhook received. Sig length: ${sig ? sig.length : 0}`);
 
     try {
-        const event = stripeService.verifyWebhookSignature(req.body, sig);
-        console.log(`Webhook event type: ${event.type}`);
+        // Use generation-specific webhook secret if available, otherwise fall back to default
+        const webhookSecret = process.env.STRIPE_GENERATION_WEBHOOK_SECRET || process.env.STRIPE_WEBHOOK_SECRET;
+
+        if (!webhookSecret) {
+            console.error(`[${requestId}] ❌ Webhook secret is missing from environment variables`);
+            throw new Error('Webhook secret configuration missing');
+        }
+
+        console.log(`[${requestId}] Verifying signature with secret ending in ...${webhookSecret.slice(-4)}`);
+
+        let event;
+        try {
+            event = stripeService.verifyWebhookSignature(req.body, sig, webhookSecret);
+        } catch (err) {
+            console.error(`[${requestId}] ❌ Webhook signature verification failed:`, err.message);
+            throw err;
+        }
+
+        console.log(`[${requestId}] ✅ Webhook verified. Event type: ${event.type}, ID: ${event.id}`);
 
         if (event.type === 'checkout.session.completed') {
             const checkoutSession = event.data.object;
+            console.log(`[${requestId}] Processing checkout.session.completed for session: ${checkoutSession.id}`);
 
             // Extract session ID from metadata
-            const sessionId = checkoutSession.metadata.generation_session_id;
+            const sessionId = checkoutSession.metadata?.generation_session_id;
 
             if (!sessionId) {
-                console.error('No generation_session_id in Stripe metadata');
+                console.error(`[${requestId}] ❌ No generation_session_id in Stripe metadata. Metadata received:`, JSON.stringify(checkoutSession.metadata));
                 return res.status(400).json({ error: 'Missing session ID in metadata' });
             }
+
+            console.log(`[${requestId}] Found generation session ID: ${sessionId}`);
 
             // Complete payment and create orders
             const paymentData = {
@@ -186,17 +209,27 @@ async function handleGenerationWebhook(req, res) {
                 status: checkoutSession.payment_status
             };
 
-            const result = await generationService.completeGenerationPayment(
-                sessionId,
-                checkoutSession.id,
-                paymentData
-            );
+            let result;
+            try {
+                result = await generationService.completeGenerationPayment(
+                    sessionId,
+                    checkoutSession.id,
+                    paymentData
+                );
+            } catch (paymentError) {
+                console.error(`[${requestId}] ❌ Failed to complete generation payment logic:`, paymentError);
+                // We return 200 to Stripe so they don't retry indefinitely if it's a logic error we can't fix with a retry
+                // But we should probably alert/monitor this
+                return res.status(500).json({ error: 'Internal processing error', details: paymentError.message });
+            }
 
             // Skip queuing if already processed
             if (result.alreadyProcessed) {
-                console.log(`⚠️ Payment already processed for session ${sessionId}, skipping queue`);
+                console.log(`[${requestId}] ⚠️ Payment already processed for session ${sessionId}, skipping queue`);
                 return res.status(200).json({ received: true, alreadyProcessed: true });
             }
+
+            console.log(`[${requestId}] Payment completed. Created ${result.orders.length} orders. Proceeding to queue jobs.`);
 
             // Get session details once (outside loop)
             const sessionDetails = await generationService.getGenerationSessionDetails(sessionId);
@@ -208,11 +241,12 @@ async function handleGenerationWebhook(req, res) {
             });
 
             // Queue all article generation jobs
+            let queuedCount = 0;
             for (const order of result.orders) {
                 const article = articleMap.get(order.articleId);
 
                 if (!article) {
-                    console.error(`❌ Article not found for order ${order.orderId}`);
+                    console.error(`[${requestId}] ❌ Article not found for order ${order.orderId}`);
                     continue;
                 }
 
@@ -222,7 +256,7 @@ async function handleGenerationWebhook(req, res) {
                 );
 
                 if (!request) {
-                    console.error(`❌ Generation request not found for article ${article.articleId} with topic ${article.topic}`);
+                    console.error(`[${requestId}] ❌ Generation request not found for article ${article.articleId} with topic ${article.topic}`);
                     continue;
                 }
 
@@ -241,12 +275,15 @@ async function handleGenerationWebhook(req, res) {
                         isRegeneration: false
                     });
 
-                    console.log(`✅ Queued article generation for order ${order.orderId}, article ${order.articleId}`);
+                    queuedCount++;
+                    console.log(`[${requestId}] ✅ Queued article generation for order ${order.orderId}, article ${order.articleId}`);
                 } catch (queueError) {
-                    console.error(`❌ Failed to queue job for order ${order.orderId}:`, queueError);
+                    console.error(`[${requestId}] ❌ Failed to queue job for order ${order.orderId}:`, queueError);
                     // Continue with other orders even if one fails
                 }
             }
+
+            console.log(`[${requestId}] Queuing complete. ${queuedCount}/${result.orders.length} jobs queued.`);
 
             // Send bulk confirmation email
             try {
@@ -259,19 +296,21 @@ async function handleGenerationWebhook(req, res) {
                         statusUrl: `${process.env.FRONTEND_URL}/bulk-generation-status?session_id=${sessionId}`
                     }
                 );
-                console.log(`✅ Sent confirmation email to ${sessionDetails.email}`);
+                console.log(`[${requestId}] ✅ Sent confirmation email to ${sessionDetails.email}`);
             } catch (emailError) {
-                console.error(`❌ Failed to send confirmation email:`, emailError);
+                console.error(`[${requestId}] ❌ Failed to send confirmation email:`, emailError);
                 // Don't fail the webhook if email fails
             }
 
-            console.log(`✅ Payment webhook processed - Session: ${sessionId}, Orders: ${result.orders.length}, Queued: ${result.orders.length}`);
+            console.log(`[${requestId}] ✅ Payment webhook fully processed - Session: ${sessionId}`);
+        } else {
+            console.log(`[${requestId}] Ignoring event type: ${event.type}`);
         }
 
         res.status(200).json({ received: true });
 
     } catch (error) {
-        console.error('Webhook error:', error);
+        console.error(`[${requestId}] ❌ Critical Webhook error:`, error);
         res.status(400).json({ error: error.message });
     }
 }
