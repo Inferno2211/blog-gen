@@ -16,6 +16,24 @@ class PurchaseService {
     }
 
     /**
+     * Normalize backlink data to consistent snake_case keys and provide fallbacks
+     * @param {Object} data - Incoming backlink data (may be camelCase or snake_case)
+     * @returns {Object|null}
+     */
+    _normalizeBacklinkData(data) {
+        if (!data) return null;
+        return {
+            type: data.type || data?.type || 'backlink',
+            // SEO keyword (legacy): prefer keyword if present
+            keyword: data.keyword || data.keyword || '',
+            // Explicit anchor text for clarity
+            anchor_text: data.anchor_text || data.anchorText || data.keyword || '',
+            target_url: data.target_url || data.targetUrl || data.targetURL || '',
+            notes: data.notes || ''
+        };
+    }
+
+    /**
      * Initiate a new purchase order
      * @param {string} articleId - The article ID to purchase backlink for
      * @param {Object} backlinkData - { keyword, target_url, notes? }
@@ -212,11 +230,11 @@ class PurchaseService {
                     alreadyPaid: true,
                     orderId: existingOrder.id,
                     orderType: isArticleGeneration ? 'article_generation' : 'backlink',
-                    sessionData: {
+                        sessionData: {
                         sessionId: session.id,
                         email: session.email,
                         article_id: session.article_id,
-                        backlink_data: session.backlink_data,
+                            backlink_data: this._normalizeBacklinkData(session.backlink_data),
                         articleTitle: session.article.slug
                     }
                 };
@@ -263,7 +281,7 @@ class PurchaseService {
                                         sessionId: session.id,
                                         email: session.email,
                                         article_id: session.article_id,
-                                        backlink_data: session.backlink_data,
+                                        backlink_data: this._normalizeBacklinkData(session.backlink_data),
                                         articleTitle: session.article?.slug || 'Unknown Article'
                                     },
                                     stripeCheckoutUrl: `https://checkout.stripe.com/pay/${session.stripe_session_id}`
@@ -336,7 +354,7 @@ class PurchaseService {
                                 sessionId: session.id,
                                 email: session.email,
                                 article_id: session.article_id,
-                                backlink_data: session.backlink_data,
+                                backlink_data: this._normalizeBacklinkData(session.backlink_data),
                                 articleTitle: session.article?.slug || 'Unknown Article'
                             },
                             stripeCheckoutUrl: checkoutSession.url
@@ -370,7 +388,7 @@ class PurchaseService {
                         sessionId: session.id,
                         email: session.email,
                         article_id: session.article_id,
-                        backlink_data: session.backlink_data,
+                        backlink_data: this._normalizeBacklinkData(session.backlink_data),
                         articleTitle: session.article?.slug || 'Unknown Article'
                     }
                 };
@@ -446,7 +464,7 @@ class PurchaseService {
                         session_id: sessionId,
                         article_id: session.article_id,
                         customer_email: session.email,
-                        backlink_data: session.backlink_data,
+                        backlink_data: this._normalizeBacklinkData(session.backlink_data),
                         payment_data: {
                             stripe_session_id: stripeSessionId,
                             amount: amount,
@@ -1722,7 +1740,12 @@ class PurchaseService {
                                 categories: article.domain.categories
                             } : null
                         },
-                        backlinkData: item.backlinkData
+                        backlinkData: item.backlinkData ? {
+                            keyword: item.backlinkData.keyword || '',
+                            anchorText: item.backlinkData.anchorText || item.backlinkData.anchor_text || item.backlinkData.keyword || '',
+                            targetUrl: item.backlinkData.targetUrl || item.backlinkData.target_url || '',
+                            notes: item.backlinkData.notes || ''
+                        } : undefined
                     };
                 })
             );
@@ -1789,7 +1812,10 @@ class PurchaseService {
                     domain: order.article?.domain?.slug || 'Unknown'
                 },
                 backlink_data: order.backlink_data ? {
+                    // Legacy 'keyword' left for backward compatibility (SEO keyword),
+                    // but prefer explicit 'anchor_text' when available
                     keyword: order.backlink_data.keyword,
+                    anchor_text: order.backlink_data.anchor_text || order.backlink_data.keyword || '',
                     target_url: order.backlink_data.target_url,
                     notes: order.backlink_data.notes
                 } : undefined

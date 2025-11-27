@@ -329,6 +329,7 @@ async function approveAndPublish(versionId, adminId, reviewNotes) {
                             ...(isArticleGeneration ? {} : {
                                 backlinkData: {
                                     keyword: order.backlink_data.keyword,
+                                    anchorText: order.backlink_data.anchor_text || order.backlink_data.keyword || '',
                                     targetUrl: order.backlink_data.target_url
                                 }
                             })

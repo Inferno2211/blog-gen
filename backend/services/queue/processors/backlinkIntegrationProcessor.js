@@ -14,7 +14,7 @@ async function processBacklinkIntegration(job) {
     
     // Extract backlink details from nested structure
     const targetUrl = backlinkData?.target_url || job.data.targetUrl;
-    const anchorText = backlinkData?.keyword || job.data.anchorText;
+    const anchorText = backlinkData?.anchor_text || backlinkData?.keyword || job.data.anchorText;
     const notes = backlinkData?.notes || job.data.notes;
     const email = customerEmail || job.data.email;
 

@@ -74,7 +74,7 @@ async function processArticleGeneration(job) {
             userPrompt: null,
             isCustomPrompt: false,
             internalLinkEnabled: internalLinkCandidates && internalLinkCandidates.length > 0,
-            noExternalBacklinks: false, // include backlink as requested by customer
+            noExternalBacklinks: !targetUrl, // include backlink when targetUrl is provided
             niche,
             keyword,
             topic,
@@ -82,6 +82,9 @@ async function processArticleGeneration(job) {
             model: job.data.model || 'gemini-2.5-flash',
             provider: job.data.provider || 'gemini'
         };
+        // If a backlink is provided, supply it explicitly to the generation params
+        if (targetUrl) genParams.targetURL = targetUrl;
+        if (anchorText) genParams.anchorText = anchorText;
 
         // Call core service to generate QC'd version
         const result = await coreServices.createVersionForArticle(articleId, genParams, 3);

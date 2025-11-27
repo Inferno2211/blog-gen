@@ -291,7 +291,10 @@ class ArticleGenerationService {
                                 customer_email: session.email,
                                 backlink_data: {
                                     type: 'ARTICLE_GENERATION',
-                                    keyword: request.anchorText,
+                                    // Keep legacy 'keyword' for backward compatibility (SEO keyword),
+                                    // but add explicit anchor_text for clarity when anchor differs.
+                                    keyword: request.keyword || request.anchorText || '',
+                                    anchor_text: request.anchorText || '',
                                     target_url: request.targetUrl,
                                     notes: request.notes || '',
                                     topic: request.topic,
@@ -445,7 +448,7 @@ class ArticleGenerationService {
                     niche: backlinkData.niche || order.article?.niche || null,
                     keyword: backlinkData.keyword || order.article?.keyword || null,
                     targetUrl: backlinkData.target_url || order.article?.backlink_target || '',
-                    anchorText: order.article?.anchor || backlinkData.keyword || '',
+                    anchorText: order.article?.anchor || backlinkData.anchor_text || backlinkData.keyword || '',
                     notes: backlinkData.notes || null
                 }
             };

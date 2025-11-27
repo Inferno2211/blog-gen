@@ -36,7 +36,7 @@ class StripeService {
       const productName = isArticleGeneration ? 'Custom Article Generation' : 'Article Backlink Placement';
       const description = isArticleGeneration
         ? `Custom AI-generated article for domain with title: "${backlink_data.articleTitle || 'Custom Article'}"`
-        : `Contextual backlink placement for "${backlink_data.keyword}" in article ${article_id}`;
+        : `Contextual backlink placement for "${backlink_data.anchor_text || backlink_data.keyword}" in article ${article_id}`;
 
       // Create checkout session with dynamic pricing
       const checkoutSession = await this.stripe.checkout.sessions.create({
@@ -56,7 +56,7 @@ class StripeService {
                 } : {
                   type: 'backlink',
                   article_id,
-                  keyword: backlink_data.keyword,
+                  keyword: backlink_data.anchor_text || backlink_data.keyword,
                   target_url: backlink_data.target_url
                 }
               },
@@ -79,7 +79,7 @@ class StripeService {
             notes: backlink_data.notes || ''
           } : {
             article_id,
-            keyword: backlink_data.keyword,
+            keyword: backlink_data.anchor_text || backlink_data.keyword,
             target_url: backlink_data.target_url,
             notes: backlink_data.notes || ''
           })
@@ -234,7 +234,8 @@ class StripeService {
         keyword: session.metadata.focus_keywords || '',
         notes: session.metadata.notes || ''
       } : {
-        keyword: session.metadata.keyword,
+        keyword: session.metadata.keyword || '',
+        anchor_text: session.metadata.anchor_text || session.metadata.keyword || '',
         target_url: session.metadata.target_url,
         notes: session.metadata.notes || null
       };
@@ -269,7 +270,7 @@ class StripeService {
           niche: backlinkData.niche || '',
           keyword: backlinkData.keyword || '',
           targetUrl: backlinkData.target_url || '',
-          anchorText: backlinkData.keyword || '',
+          anchorText: backlinkData.anchor_text || backlinkData.keyword || '',
           email: order.customer_email
         });
         console.log(`Article generation job added to queue for order ${order.id}`);
@@ -279,7 +280,7 @@ class StripeService {
           orderId: order.id,
           articleId: articleId,
           targetUrl: backlinkData.target_url,
-          anchorText: backlinkData.keyword,
+          anchorText: backlinkData.anchor_text || backlinkData.keyword,
           notes: backlinkData.notes,
           email: order.customer_email
         });
@@ -338,7 +339,7 @@ class StripeService {
         metadata: {
           order_id: orderId,
           refund_reason: reason,
-          original_keyword: order.backlink_data.keyword,
+          original_keyword: order.backlink_data.anchor_text || order.backlink_data.keyword,
           original_url: order.backlink_data.target_url
         }
       });
