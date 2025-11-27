@@ -30,11 +30,18 @@ const getLogs = async (req, res) => {
         }
 
         // Execute PM2 logs command
-        const command = `pm2 logs orbitpbn-test-backend --lines ${lines} --nostream`;
-        const { stdout, stderr } = await execPromise(command);
+        const backendCommand = `pm2 logs orbitpbn-test-backend --lines ${lines} --nostream`;
+        const workerCommand = `pm2 logs orbitpbn-test-worker --lines ${lines} --nostream`;
         
-        const rawLogs = stdout || stderr;
-
+        const [backendResult, workerResult] = await Promise.all([
+            execPromise(backendCommand).catch(err => ({ stdout: '', stderr: err.message })),
+            execPromise(workerCommand).catch(err => ({ stdout: '', stderr: err.message }))
+        ]);
+        
+        const backendLogs = backendResult.stdout || backendResult.stderr || '';
+        const workerLogs = workerResult.stdout || workerResult.stderr || '';
+        
+        const rawLogs = `=== Backend Logs ===\n${backendLogs}\n\n=== Worker Logs ===\n${workerLogs}`;
         return res.status(200).json({
             success: true,
             logs: rawLogs.split("\n"),
