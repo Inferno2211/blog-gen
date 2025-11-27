@@ -335,7 +335,7 @@ class QueueWorker {
             } catch (error) {
                 console.error('Failed to get queue stats:', error);
             }
-        }, 60000); // Log every minute
+        }, 600000); // Log every minute
     }
 }
 
